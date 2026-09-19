@@ -108,41 +108,49 @@ for(const [name,m] of Object.entries(MOVES)){
   }
 }
 
-// Whole-cube face-to-face rotations use the circle network itself.
-// 44 moving points have source/destination nodes on one shared circle.
-// The remaining eight switch circles once at an existing graph intersection.
-function sharedCircleCount(a,b){
-  return a.circles.filter(id=>b.circles.includes(id)).length;
-}
-function hasTwoArcRoute(a,b,g){
-  for(const mid of g.slots){
-    if(mid===a || mid===b) continue;
-    if(sharedCircleCount(a,mid)>0 && sharedCircleCount(mid,b)>0) return true;
-  }
-  return false;
-}
-
+// Whole-cube rotation is three simultaneous slice turns.
+// For any X/Y/Z quarter rotation:
+//   36 moving points remain on the active axis family's three circles
+//   (12 inner + 12 middle + 12 outer)
+//   16 axis-facing face-perimeter points move radially between rings
+//   2 face centers stay fixed
 for(const axis of ['x','y','z']){
   for(const dir of [-1,1]){
-    const ss=stickers();
-    let moved=0,direct=0,switches=0;
-    for(const s of ss){
+    const family=FAMILY[axis];
+    const center=g.centers[family];
+    let moved=0,track=0,radial=0;
+    const rings={0:0,1:0,2:0};
+
+    for(const s of stickers()){
       const before=nodeFor(s.p,s.n,g);
       const p=rotate(s.p,axis,dir);
       const n=rotate(s.n,axis,dir);
       const after=nodeFor(p,n,g);
       if(dist(before,after)<=.001) continue;
       moved++;
-      if(sharedCircleCount(before,after)>0) direct++;
-      else{
-        switches++;
-        assert.ok(hasTwoArcRoute(before,after,g),
-          `whole-cube ${axis} ${dir} must have a two-circle network route`);
+
+      const r0=Math.hypot(before.x-center[0],before.y-center[1]);
+      const r1=Math.hypot(after.x-center[0],after.y-center[1]);
+      let ringIndex=-1;
+      for(let i=0;i<g.radii.length;i++){
+        if(Math.abs(r0-g.radii[i])<1e-6 && Math.abs(r1-g.radii[i])<1e-6){
+          ringIndex=i; break;
+        }
+      }
+      if(ringIndex>=0){
+        track++;
+        rings[ringIndex]++;
+      }else{
+        radial++;
       }
     }
-    assert.equal(moved,52,`whole-cube ${axis} ${dir} should move 52 sticker positions`);
-    assert.equal(direct,44,`whole-cube ${axis} ${dir} should have 44 direct circle paths`);
-    assert.equal(switches,8,`whole-cube ${axis} ${dir} should have 8 circle-switch paths`);
+
+    assert.equal(moved,52,`whole-cube ${axis} ${dir} should move 52 points`);
+    assert.equal(track,36,`whole-cube ${axis} ${dir} should have 36 track points`);
+    assert.equal(radial,16,`whole-cube ${axis} ${dir} should have 16 radial points`);
+    assert.equal(rings[0],12,`whole-cube ${axis} inner ring should carry 12 points`);
+    assert.equal(rings[1],12,`whole-cube ${axis} middle ring should carry 12 points`);
+    assert.equal(rings[2],12,`whole-cube ${axis} outer ring should carry 12 points`);
 
     let state=stickers();
     for(let q=0;q<4;q++){
@@ -231,4 +239,4 @@ for(const p of [0,.1,.25,.5,.75,.9,1]){
   assert.ok(Math.abs(orbitProgress-p)<1e-12,'cube/orbit progress must be 1:1');
 }
 
-console.log('orbit reference model: OK (54 nodes, 24 views, face turns 12 track + 8 radial, view turns 44 direct + 8 switches)');
+console.log('orbit reference model: OK (54 nodes, 24 views, face 12+8, whole view 36 track + 16 radial)');
