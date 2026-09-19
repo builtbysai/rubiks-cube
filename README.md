@@ -23,6 +23,11 @@ Live: https://builtbysai.com/rubiks-cube/
   finds a solution in about 20 moves, then plays it back move by move. The
   solver runs in a Web Worker so the page never freezes during its one-time
   table setup.
+- **Live Cayley graph.** A 2D minimap of the cube group's Cayley graph
+  floats over the scene: 127 distinct permutations in the radius-2 ball
+  around your current state, re-centering with a smooth animation on every
+  turn. The edge you just traveled glows, the solver's next move is
+  spotlighted during playback, and tapping any dot turns the cube there.
 - **Timer, move counter, win detection.** The clock starts on your first
   turn and stops when every face is uniform again.
 

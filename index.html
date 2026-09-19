@@ -104,6 +104,32 @@
     footer{ gap:0; }
     #status{ font-size:12px; padding:6px 12px; top:8px; }
   }
+  /* Cayley graph minimap: floats over the stage, synced with the cube. */
+  #graphPanel{
+    position:absolute; right:10px; bottom:10px; width:252px; z-index:5;
+    background:rgba(255,253,248,.93); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 8px 24px rgba(35,32,26,.14); padding:8px 10px 6px;
+    transition:opacity .25s, transform .25s;
+  }
+  #graphPanel.hidden{ opacity:0; transform:translateY(10px); pointer-events:none; }
+  #graphTitle{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--ink-soft); padding:0 2px 4px;
+  }
+  #graphTitle span:last-child{ font-weight:600; letter-spacing:0; text-transform:none; }
+  #graph{ width:100%; aspect-ratio:1/1; height:auto; display:block; touch-action:none; cursor:pointer; }
+  #graphHint{ font-size:10px; color:var(--ink-soft); text-align:center; padding:4px 0 1px; }
+  #btnGraph[aria-pressed="true"]{ background:#e9e2d2; }
+  @media (max-width:560px){
+    #graphPanel{ width:176px; right:8px; bottom:8px; padding:6px 8px 4px; }
+    #graphTitle{ font-size:9px; }
+    #graphHint{ font-size:9px; }
+  }
+  @media (max-height: 540px){
+    #graphPanel{ width:196px; }
+    #graphHint{ display:none; }
+  }
 </style>
 <script type="importmap">
 {
@@ -130,6 +156,11 @@
 <div id="stage">
   <canvas id="c"></canvas>
   <div id="status"></div>
+  <div id="graphPanel">
+    <div id="graphTitle"><span>Cayley graph</span><span id="graphCount"></span></div>
+    <canvas id="graph"></canvas>
+    <div id="graphHint">radius 2 &middot; tap a dot to turn</div>
+  </div>
   <div id="win">
     <div class="card">
       <h2>Solved</h2>
@@ -145,6 +176,7 @@
     <button id="btnSolve">Solve</button>
     <button id="btnUndo">Undo</button>
     <button id="btnReset">Reset</button>
+    <button id="btnGraph" aria-pressed="true">Graph</button>
   </div>
   <div id="movepad"></div>
   <div class="hint">
@@ -435,6 +467,7 @@ function settleCubies(cubies, angle){
 
 function finishMove(){
   const { pivot, cubies, move } = active;
+  const tok = moveToken(move);
   settleCubies(cubies, active.angle);
   cubeGroup.remove(pivot);
   active = null;
@@ -442,6 +475,7 @@ function finishMove(){
   movesEl.textContent = moveCount;
   if (move.record) history.push(move);
   afterMove();
+  recenterGraph(facelets(), tok);
 }
 
 // Instant (unanimated) turn, used by tests.
@@ -466,6 +500,7 @@ function afterMove(){
     stopTimer();
     if (solving){
       solving = false;
+      graphSolPath = []; graphNextMove = null;
       showWin('The solver found the way home.');
     } else {
       showWin();
@@ -612,8 +647,10 @@ function doReset(){
   solving = false; solverBusy = false; suppressWin = false;
   buildCube();
   history.length = 0; moveCount = 0; movesEl.textContent = '0';
+  graphSolPath = []; graphNextMove = null;
   resetTimer(); hideWin(); hideStatus();
   showStatus('Back to a fresh cube.');
+  recenterGraph(facelets());
 }
 
 /* ------------------------------ solver ------------------------------------- */
@@ -688,6 +725,7 @@ async function doSolve(){
   const tokens = sol.trim().split(/\s+/);
   showStatus('Solution · ' + tokens.length + ' moves: ' + sol, true);
   solving = true;
+  graphSolPath = tokens.slice(); graphNextMove = tokens[0] || null;
   restartTimer();
   for (const t of tokens) queue.push({ ...parseMove(t), duration:150, record:false });
 }
@@ -725,6 +763,237 @@ window.addEventListener('keydown', e => {
   noteActivity();
 });
 
+/* ------------------------------ Cayley graph ------------------------------ */
+// A live 2D map of the cube group: vertices are permutations (54-char facelet
+// strings, computed with the same cubejs build that powers the solver),
+// edges are the 12 basic turns. Shows the ball of radius 2 around the current
+// state and re-centers on every move, so the graph and the 3D cube never
+// disagree.
+
+const GRAPH_MOVES = ['R',"R'",'L',"L'",'U',"U'",'D',"D'",'F',"F'",'B',"B'"];
+const graphInv = t => t.endsWith('2') ? t : (t.endsWith("'") ? t[0] : t + "'");
+const SOLVED_FACELETS = 'UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB';
+const GRAPH_CSS = { U:'#ffffff', D:'#ffd500', F:'#009b48', B:'#0046ad', R:'#b71234', L:'#ff5800' };
+
+const graphPanel = document.getElementById('graphPanel');
+const graphCanvas = document.getElementById('graph');
+const gtx = graphCanvas.getContext('2d');
+const graphCountEl = document.getElementById('graphCount');
+const btnGraph = document.getElementById('btnGraph');
+let graphOn = true;
+let gNodes = new Map();  // facelet key -> {key, spec, x, y, tx, ty, alpha, talpha}
+let gEdges = [];         // {a, b, move, glow}
+let graphCenterKey = '';
+let graphSolPath = [];   // remaining solver tokens, for the spotlight
+let graphNextMove = null;
+let graphTime = 0;
+
+function moveToken(m){
+  for (const L of Object.keys(MOVES)){
+    const b = MOVES[L];
+    if (b.axis === m.axis && b.layer === m.layer){
+      if (m.turns === 2) return L + '2';
+      return m.dir === b.dir ? L : L + "'";
+    }
+  }
+  return '';
+}
+
+function graphBall(center){
+  const nodes = new Map();
+  const edges = [];
+  const seen = new Set();
+  const link = (a, b, move) => {
+    const k = a < b ? a + '|' + b : b + '|' + a;
+    if (seen.has(k)) return;
+    seen.add(k);
+    edges.push({ a, b, move, glow: 0 });
+  };
+  nodes.set(center, { ring:0, moves:[] });
+  const r1 = GRAPH_MOVES.map(m => Cube.fromString(center).move(m).asString());
+  GRAPH_MOVES.forEach((m, mi) => {
+    if (!nodes.has(r1[mi])) nodes.set(r1[mi], { ring:1, moves:[m], mi });
+    link(center, r1[mi], m);
+  });
+  GRAPH_MOVES.forEach((g, gi) => {
+    let ci = 0;
+    for (const h of GRAPH_MOVES){
+      if (h === graphInv(g)) continue; // no immediate backtrack
+      const k = Cube.fromString(r1[gi]).move(h).asString();
+      if (!nodes.has(k)) nodes.set(k, { ring:2, moves:[g, h], mi:gi, ci });
+      link(r1[gi], k, h);
+      ci++;
+    }
+  });
+  return { nodes, edges };
+}
+
+function graphTarget(spec, S){
+  const c = S / 2;
+  if (spec.ring === 0) return [c, c];
+  const base = -Math.PI/2 + spec.mi * Math.PI/6;
+  if (spec.ring === 1){
+    const r = S * 0.335;
+    return [c + r*Math.cos(base), c + r*Math.sin(base)];
+  }
+  const a = base + (spec.ci - 5) * 0.0873;
+  const r = S * 0.46 + (spec.ci % 2) * S * 0.018;
+  return [c + r*Math.cos(a), c + r*Math.sin(a)];
+}
+
+function graphSize(){
+  const r = graphCanvas.getBoundingClientRect();
+  return r.width || 232;
+}
+
+function sizeGraphCanvas(){
+  const S = graphSize();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  graphCanvas.width = Math.round(S * dpr);
+  graphCanvas.height = Math.round(S * dpr);
+  gtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function graphEdgeFor(edges, nodes, fromKey, tok){
+  for (const e of edges){
+    const n = nodes.get(e.b);
+    if (e.a === fromKey && n && n.moves.length === 1 && n.moves[0] === tok) return e;
+  }
+  return null;
+}
+
+// Every graph edge the turn `tok` walks through (a double turn walks two).
+function graphPathEdges(edges, nodes, center, tok){
+  const out = [];
+  if (!tok) return out;
+  const base = tok[0] + (tok.includes("'") ? "'" : "");
+  const e1 = graphEdgeFor(edges, nodes, center, base);
+  if (!e1) return out;
+  out.push(e1);
+  if (tok.includes('2')){
+    const k2 = Cube.fromString(center).move(tok).asString();
+    const e2 = edges.find(e => (e.a === e1.b && e.b === k2) || (e.a === k2 && e.b === e1.b));
+    if (e2) out.push(e2);
+  }
+  return out;
+}
+
+function recenterGraph(center, lastToken){
+  if (!graphOn) return;
+  const S = graphSize();
+  const { nodes, edges } = graphBall(center);
+  const next = new Map();
+  for (const [key, spec] of nodes){
+    const [tx, ty] = graphTarget(spec, S);
+    const old = gNodes.get(key);
+    if (old){ old.spec = spec; old.tx = tx; old.ty = ty; old.talpha = 1; next.set(key, old); }
+    else next.set(key, { key, spec, x:S/2, y:S/2, tx, ty, alpha:0, talpha:1 });
+  }
+  for (const [key, n] of gNodes) if (!next.has(key)){ n.talpha = 0; next.set(key, n); }
+  gNodes = next;
+  gEdges = edges;
+  graphCenterKey = center;
+  const pathEdges = (tok) => graphPathEdges(edges, nodes, center, tok);
+  for (const e of pathEdges(lastToken && graphInv(lastToken))) e.glow = 1;
+  if (graphSolPath.length){
+    graphSolPath.shift(); // the turn that just landed
+    graphNextMove = graphSolPath[0] || null;
+  }
+  for (const e of pathEdges(graphNextMove)) e.glow = 1;
+  graphCountEl.textContent = nodes.size + ' states';
+}
+
+function drawGraph(dt){
+  if (!graphOn) return;
+  graphTime += dt;
+  const S = graphSize();
+  const k = Math.min(1, dt * 9);
+  for (const n of gNodes.values()){
+    n.x += (n.tx - n.x) * k;
+    n.y += (n.ty - n.y) * k;
+    n.alpha += (n.talpha - n.alpha) * k;
+  }
+  for (const [key, n] of gNodes) if (n.talpha === 0 && n.alpha < 0.03) gNodes.delete(key);
+  gtx.clearRect(0, 0, S, S);
+  gtx.lineCap = 'round';
+  for (const e of gEdges){
+    e.glow = Math.max(0, e.glow - dt * 0.7);
+    const a = gNodes.get(e.a), b = gNodes.get(e.b);
+    if (!a || !b || a.alpha < 0.04 || b.alpha < 0.04) continue;
+    const al = Math.min(a.alpha, b.alpha);
+    if (e.glow > 0.02){
+      gtx.strokeStyle = 'rgba(183,18,52,' + (0.25 + 0.65*e.glow) * al + ')';
+      gtx.lineWidth = 1 + 2*e.glow;
+    } else {
+      gtx.strokeStyle = 'rgba(120,108,88,' + 0.30 * al + ')';
+      gtx.lineWidth = 1;
+    }
+    gtx.beginPath(); gtx.moveTo(a.x, a.y); gtx.lineTo(b.x, b.y); gtx.stroke();
+  }
+  for (const n of gNodes.values()){
+    if (n.spec.ring !== 2 || n.alpha < 0.04) continue;
+    gtx.fillStyle = 'rgba(140,128,104,' + 0.55 * n.alpha + ')';
+    gtx.beginPath(); gtx.arc(n.x, n.y, 1.8, 0, 7); gtx.fill();
+  }
+  gtx.textAlign = 'center'; gtx.textBaseline = 'middle';
+  for (const n of gNodes.values()){
+    if (n.spec.ring !== 1 || n.alpha < 0.04) continue;
+    const m = n.spec.moves[0];
+    gtx.globalAlpha = n.alpha;
+    gtx.fillStyle = GRAPH_CSS[m[0]];
+    gtx.strokeStyle = 'rgba(35,32,26,.55)'; gtx.lineWidth = 1.2;
+    gtx.beginPath(); gtx.arc(n.x, n.y, 7, 0, 7); gtx.fill(); gtx.stroke();
+    if (n.key === SOLVED_FACELETS){
+      gtx.strokeStyle = '#c9a227'; gtx.lineWidth = 2.5;
+      gtx.beginPath(); gtx.arc(n.x, n.y, 11.5, 0, 7); gtx.stroke();
+    }
+    gtx.fillStyle = '#6b6455'; gtx.font = '600 8.5px system-ui, sans-serif';
+    gtx.fillText(m, n.x + (n.x - S/2) * 0.17, n.y + (n.y - S/2) * 0.17);
+    gtx.globalAlpha = 1;
+  }
+  const c = gNodes.get(graphCenterKey);
+  if (c && c.alpha > 0.04){
+    const pulse = 1 + 0.08 * Math.sin(graphTime * 4);
+    gtx.globalAlpha = c.alpha;
+    gtx.fillStyle = '#b71234';
+    gtx.beginPath(); gtx.arc(c.x, c.y, 8.5 * pulse, 0, 7); gtx.fill();
+    gtx.fillStyle = '#fffdf8';
+    gtx.beginPath(); gtx.arc(c.x, c.y, 3.2, 0, 7); gtx.fill();
+    if (graphCenterKey === SOLVED_FACELETS){
+      gtx.strokeStyle = '#c9a227'; gtx.lineWidth = 2.5;
+      gtx.beginPath(); gtx.arc(c.x, c.y, 12.5, 0, 7); gtx.stroke();
+    }
+    gtx.globalAlpha = 1;
+  }
+}
+
+// Tap a graph node to turn the cube there.
+graphCanvas.addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  e.preventDefault();
+  if (inputLocked() || busy()) return;
+  const r = graphCanvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  let best = null, bestD = 1e9;
+  for (const n of gNodes.values()){
+    if (n.spec.ring === 0 || n.alpha < 0.5) continue;
+    const d = Math.hypot(n.x - x, n.y - y);
+    const rad = n.spec.ring === 1 ? 15 : 9;
+    if (d < rad && d < bestD){ best = n; bestD = d; }
+  }
+  if (!best) return;
+  hideWin(); hideStatus();
+  for (const t of best.spec.moves) queue.push({ ...parseMove(t), duration:170, record:true });
+  noteActivity();
+});
+
+btnGraph.addEventListener('click', () => {
+  graphOn = !graphOn;
+  btnGraph.setAttribute('aria-pressed', String(graphOn));
+  graphPanel.classList.toggle('hidden', !graphOn);
+  if (graphOn){ sizeGraphCanvas(); recenterGraph(facelets()); }
+});
+
 /* --------------------------------- loop ------------------------------------ */
 
 let lastT = performance.now();
@@ -739,6 +1008,7 @@ function resize(){
   renderer.setSize(w, h, false);
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
+  sizeGraphCanvas();
 }
 window.addEventListener('resize', resize);
 
@@ -766,9 +1036,12 @@ function loop(now){
   }
 
   renderer.render(scene, camera);
+  drawGraph(dt);
 }
 
 resize();
+sizeGraphCanvas();
+recenterGraph(facelets());
 showStatus('Drag a sticker to turn a layer.');
 requestAnimationFrame(loop);
 
@@ -783,6 +1056,28 @@ window.__cube = {
     moveCount += 0;
   },
   facelets, isSolved,
+  graph: () => ({ on:graphOn, nodes:gNodes.size, edges:gEdges.length,
+                  center:graphCenterKey === facelets() }),
+  graphNodePos(tok){ // css px relative to the graph canvas, for tests
+    for (const n of gNodes.values())
+      if (n.spec.ring === 1 && n.spec.moves[0] === tok) return [n.tx, n.ty];
+    return null;
+  },
+  graphRecenter(){ const t0 = performance.now(); recenterGraph(facelets(), 'R'); return performance.now() - t0; },
+  graphDegree(key){ let d = 0; for (const e of gEdges) if (e.a === key || e.b === key) d++; return d; },
+  graphNext: () => graphNextMove,
+  graphProfile(){
+    const t0 = performance.now();
+    graphBall(facelets());
+    const t1 = performance.now();
+    recenterGraph(facelets(), 'R');
+    const t2 = performance.now();
+    return { ball:+(t1-t0).toFixed(1), total:+(t2-t0).toFixed(1) };
+  },
+  graphPathLen(tok){
+    const specs = new Map([...gNodes].map(([k, v]) => [k, v.spec]));
+    return graphPathEdges(gEdges, specs, graphCenterKey, tok).length;
+  },
   scramble: n => doScramble(n),
   reset: () => doReset(),
   applySolution(sol){ for (const t of sol.trim().split(/\s+/)){ if (t) applyInstant({ ...parseMove(t), record:false }); } },
