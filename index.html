@@ -445,7 +445,7 @@ function computeTurn(dx, dy){
 function decideTurn(dx, dy){
   const t = computeTurn(dx, dy);
   if (!t) return;
-  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:190, record:true});
+  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:280, record:true});
   noteActivity();
 }
 // Start a slow-drag: create pivot, attach cubies, track drag
@@ -540,8 +540,12 @@ function updateLayerDrag(curX, curY){
   // Project drag onto the turn direction
   const dist = dx*layerDrag.dirX + dy*layerDrag.dirY;
   // 140px drag = 90 degrees (tunable)
-  const angle = layerDrag.dir * (dist / 140) * (Math.PI/2);
-  layerDrag.pivot.rotation[layerDrag.axis] = angle;
+  const raw = layerDrag.dir * (dist / 155) * (Math.PI/2);
+  const angle = Math.max(-Math.PI/2, Math.min(Math.PI/2, raw));
+  // Pointer input can arrive unevenly, especially on touch. Smooth the visual
+  // timeline while keeping it responsive enough to scrub backwards.
+  layerDrag.targetAngle = angle;
+  if (layerDrag.visualAngle === undefined) layerDrag.visualAngle = layerDrag.currentAngle || 0;
   layerDrag.currentAngle = angle;
 }
 // Finish layer drag: snap to nearest 90deg, animate, then settle
@@ -554,17 +558,21 @@ function finishLayerDrag(){
   const actualTurns = Math.abs(quarterTurns) % 4;
   // If snapped to 0 (no meaningful turn), just put cubies back
   if (actualTurns === 0){
-    for (const ch of cubies) cubeGroup.add(ch);
-    cubeGroup.remove(pivot);
+    const dragOrbitMap = layerDrag.dotMap;
+    const startAngle = layerDrag.visualAngle ?? currentAngle ?? 0;
+    active = {pivot, cubies, axis, angle:0, t:0, dur:0.20,
+              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:200, record:false},
+              fromAngle:startAngle, isDragFinish:true, isCancelledDrag:true,
+              orbitMap:dragOrbitMap, orbitStartAngle:startAngle};
     layerDrag = null;
     return;
   }
   // Animate from current to target, then finish as a move
-  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:160, record:true};
+  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:260, record:true};
   // Set up as an active move starting from current angle
   const startAngle = currentAngle || 0;
   const dragOrbitMap = layerDrag.dotMap;
-  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.16, move,
+  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.26, move,
             fromAngle:startAngle, isDragFinish:true, orbitMap:dragOrbitMap, orbitStartAngle:startAngle};
   layerDrag = null;
   noteActivity();
@@ -631,9 +639,11 @@ function finishMove(){
   settleCubies(cubies, active.angle);
   cubeGroup.remove(pivot);
   active = null;
-  moveCount++;
-  movesEl.textContent = moveCount;
-  if (move.record) history.push(move);
+  if (!active.isCancelledDrag){
+    moveCount++;
+    movesEl.textContent = moveCount;
+    if (move.record) history.push(move);
+  }
   afterMove();
 }
 
@@ -666,7 +676,7 @@ function afterMove(){
   }
 }
 
-const easeInOut = k => k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3)/2;
+const easeInOut = k => k*k*(3 - 2*k); // smoothstep: soft acceleration/deceleration without cubic jerk
 
 /* ------------------------------ cube state --------------------------------- */
 
@@ -1196,9 +1206,9 @@ function drawOrbit(){
   // One normalized move timeline drives both the cube and the orbit diagram.
   // Manual drags are fully reversible; queued/solver moves use the same paths.
   const motion = layerDrag && layerDrag.dotMap
-    ? {map:layerDrag.dotMap, t:Math.max(-1, Math.min(1, (layerDrag.currentAngle || 0)/(Math.PI/2)))}
+    ? {map:layerDrag.dotMap, t:Math.max(-1, Math.min(1, (layerDrag.visualAngle ?? layerDrag.currentAngle ?? 0)/(Math.PI/2)))}
     : active && active.orbitMap
-      ? {map:active.orbitMap, t:(active.angle ? (active.pivot.rotation[active.axis] || 0)/active.angle : 0)}
+      ? {map:active.orbitMap, t:(active.orbitProgress ?? 0)}
       : null;
 
   if (motion){
@@ -1219,19 +1229,10 @@ function drawOrbit(){
     }
   }
 
-  // Animate dots toward targets (slide along orbits)
-  // During drag, positions are set directly (no lerp)
-  const inDrag = (layerDrag && layerDrag.dotMap) || (active && active.orbitMap);
-  const slideSpeed = 0.28;
+  // Exact path motion lands directly on orbit nodes. There is intentionally no
+  // post-move catch-up lerp: that was the source of the visible snap.
   for (const dot of orbitDots){
-    if (!inDrag){
-      dot.x += (dot.tx - dot.x) * slideSpeed;
-      dot.y += (dot.ty - dot.y) * slideSpeed;
-      // Snap when close
-      if (Math.abs(dot.tx - dot.x) < 0.5) dot.x = dot.tx;
-      if (Math.abs(dot.ty - dot.y) < 0.5) dot.y = dot.ty;
-    }
-    
+    if (!motion){ dot.x = dot.tx; dot.y = dot.ty; }
     otx.fillStyle = ORBIT_CSS[dot.home] || '#888';
     otx.strokeStyle = 'rgba(35,32,26,0.6)';
     otx.lineWidth = Math.max(0.8, S*0.002);
@@ -1286,14 +1287,38 @@ function loop(now){
   camera.position.set(0, 0.7, fitZoom() * zoomFactor);
   camera.lookAt(0, 0, 0);
 
+  if (layerDrag){
+    if (layerDrag.visualAngle === undefined) layerDrag.visualAngle = layerDrag.currentAngle || 0;
+    const target = layerDrag.targetAngle ?? layerDrag.currentAngle ?? 0;
+    // Exponential damping is frame-rate independent and removes touch/pointer stepping.
+    const follow = 1 - Math.exp(-dt * 24);
+    layerDrag.visualAngle += (target - layerDrag.visualAngle) * follow;
+    layerDrag.pivot.rotation[layerDrag.axis] = layerDrag.visualAngle;
+  }
+
   if (active){
     active.t += dt;
     const k = Math.min(1, active.t / active.dur);
     // For drag-finish, interpolate from fromAngle to angle
+    const eased = easeInOut(k);
+    let displayedAngle;
     if (active.fromAngle !== undefined){
-      active.pivot.rotation[active.axis] = active.fromAngle + (active.angle - active.fromAngle) * easeInOut(k);
+      displayedAngle = active.fromAngle + (active.angle - active.fromAngle) * eased;
     } else {
-      active.pivot.rotation[active.axis] = active.angle * easeInOut(k);
+      displayedAngle = active.angle * eased;
+    }
+    active.pivot.rotation[active.axis] = displayedAngle;
+
+    // Orbit and cube are sampled from the same displayed angle. For a drag
+    // finish we preserve the progress already reached instead of restarting.
+    if (active.orbitMap){
+      if (active.isCancelledDrag){
+        active.orbitProgress = displayedAngle / (Math.PI/2);
+      } else if (active.fromAngle !== undefined){
+        active.orbitProgress = displayedAngle / (Math.PI/2);
+      } else {
+        active.orbitProgress = active.angle ? displayedAngle / active.angle : 0;
+      }
     }
     if (k >= 1) finishMove();
   } else if (queue.length){
@@ -1315,7 +1340,7 @@ window.__cube = {
     for (const t of notation.trim().split(/\s+/)){
       if (!t) continue;
       const m = { ...parseMove(t), record:true };
-      if (instant) applyInstant(m); else queue.push({ ...m, duration:120 });
+      if (instant) applyInstant(m); else queue.push({ ...m, duration:280 });
     }
     moveCount += 0;
   },
