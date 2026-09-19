@@ -646,9 +646,13 @@ function startLayerDrag(turn, startX, startY){
     // pivot at zero. This destination plus the live pivot angle gives us a
     // deterministic continuous path for every intermediate drag position.
     const savedActive=active;
-    active={axis:turn.axis,angle:turn.dir*Math.PI/2,cubies};
-    const newState=orientedStickerIds(faceletStickerIds());
-    active=savedActive;
+    let newState;
+    try{
+      active={axis:turn.axis,angle:turn.dir*Math.PI/2,cubies};
+      newState=orientedStickerIds(faceletStickerIds());
+    }finally{
+      active=savedActive;
+    }
 
     const visualMove=orientMoveForView(
       {axis:turn.axis,layer:turn.layer,dir:turn.dir,turns:1},
@@ -1505,6 +1509,7 @@ btnOrbit.addEventListener('click', () => {
   if (orbitOn){
     orbitCache = null; orbitSlotMap = null; orbitDots = null;
     sizeOrbitCanvas();
+    drawOrbit();
   }
 });
 
@@ -1594,6 +1599,7 @@ function loop(now){
 
 resize();
 sizeOrbitCanvas();
+drawOrbit();
 showStatus('Drag a sticker to turn a layer. Drag the background to change faces.');
 requestAnimationFrame(loop);
 
