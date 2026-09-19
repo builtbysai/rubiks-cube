@@ -728,93 +728,58 @@ function buildRadialPath(raw){
   };
 }
 
-function orbitCircleById(id,g=getOrbitGeometry()){
-  return g.circles.find(c=>c.id===id) || null;
+function nearestOrbitRadiusInfo(r,radii){
+  let index=0,error=Math.abs(r-radii[0]);
+  for(let i=1;i<radii.length;i++){
+    const e=Math.abs(r-radii[i]);
+    if(e<error){index=i;error=e;}
+  }
+  return {index,radius:radii[index],error};
 }
 
-function sharedOrbitCircleId(a,b){
-  if(!a?.circles || !b?.circles) return null;
-  return a.circles.find(id=>b.circles.includes(id)) || null;
-}
+// Whole-cube rotation is exactly three simultaneous slice turns around one
+// axis. That gives the reference's real motion classes:
+//  - 12 points on each of the three active-axis rings = 36 track-locked
+//  - 8 perimeter points on each opposite axis-facing face = 16 radial
+//  - 2 face centers remain fixed and therefore do not appear in the map
+function buildWholeViewPaths(raw,move,g){
+  const tolerance=Math.max(0.75,g.S*0.0035);
 
-function buildCircleSegment(from,to,circleId,direction,g){
-  const circle=orbitCircleById(circleId,g);
-  if(!circle) return null;
-  const a0=Math.atan2(from.y-circle.y,from.x-circle.x);
-  const a1=Math.atan2(to.y-circle.y,to.x-circle.x);
-  const da=directedAngleDelta(a0,a1,direction);
-  const length=Math.max(1e-6,Math.abs(da*circle.r));
-  return {
-    circleId,
-    cx:circle.x,cy:circle.y,r:circle.r,
-    a0,da,length
-  };
-}
+  const classified=raw.map(p=>{
+    const start=nearestOrbitRadiusInfo(p.r0,g.radii);
+    const end=nearestOrbitRadiusInfo(p.r1,g.radii);
+    const onTrack=
+      start.index===end.index &&
+      start.error<=tolerance &&
+      end.error<=tolerance;
+    return {...p,onTrack,ringIndex:onTrack?start.index:null};
+  });
 
-function buildWholeViewRoute(raw,direction,g){
-  // 44 of the 52 moving points have a source and destination that share one
-  // gray circle. They simply ride that circle.
-  const directId=sharedOrbitCircleId(raw.oldSlot,raw.newSlot);
-  if(directId){
-    const seg=buildCircleSegment(raw.oldSlot,raw.newSlot,directId,direction,g);
-    return {
-      kind:'viewTrack',
-      segments:[seg],
-      totalLength:seg.length,
-      direction
-    };
-  }
+  const trackRaw=classified.filter(p=>p.onTrack);
+  const direction=orbitDirectionForPaths(trackRaw.length?trackRaw:classified,move);
 
-  // The remaining eight points are edge-centers on the two faces normal to
-  // the rotation axis. Their endpoints do not share a circle. In the
-  // reference they stay on the network by riding one circle to an existing
-  // intersection and switching onto a second circle there.
-  let best=null;
-  for(const mid of g.slots){
-    if(mid===raw.oldSlot || mid===raw.newSlot) continue;
-    const c1=sharedOrbitCircleId(raw.oldSlot,mid);
-    const c2=sharedOrbitCircleId(mid,raw.newSlot);
-    if(!c1 || !c2) continue;
-
-    const s1=buildCircleSegment(raw.oldSlot,mid,c1,direction,g);
-    const s2=buildCircleSegment(mid,raw.newSlot,c2,direction,g);
-    if(!s1 || !s2) continue;
-    const total=s1.length+s2.length;
-
-    if(!best || total<best.totalLength){
-      best={
-        kind:'viewSwitch',
-        segments:[s1,s2],
-        totalLength:total,
-        direction,
-        switchX:mid.x,switchY:mid.y
-      };
-    }
-  }
-
-  // This should never happen for the 54-node reference graph, but preserve a
-  // continuous fallback rather than snapping if the geometry is edited later.
-  if(!best){
-    return {
-      kind:'radial',
-      cx:raw.center[0],cy:raw.center[1],
-      r0:raw.r0,r1:raw.r1,
-      a0:raw.a0,
-      da:shortestAngleDelta(raw.a0,raw.a1)
-    };
-  }
-  return best;
-}
-
-function wholeViewDirection(raw,g){
-  // Use one clockwise/counter-clockwise sense for the entire rotation.
-  // Evaluate both network directions and choose the shorter aggregate route.
-  let positive=0,negative=0;
-  for(const p of raw){
-    positive += buildWholeViewRoute(p, 1,g).totalLength || 0;
-    negative += buildWholeViewRoute(p,-1,g).totalLength || 0;
-  }
-  return positive<=negative ? 1 : -1;
+  return classified.map(p=>({
+    dot:p.dot,
+    oldX:p.oldSlot.x,oldY:p.oldSlot.y,
+    newX:p.newSlot.x,newY:p.newSlot.y,
+    path:p.onTrack
+      ? {
+          kind:'viewTrack',
+          cx:p.center[0],cy:p.center[1],
+          r:g.radii[p.ringIndex],
+          ringIndex:p.ringIndex,
+          a0:p.a0,
+          da:directedAngleDelta(p.a0,p.a1,direction),
+          direction
+        }
+      : {
+          kind:'viewRadial',
+          cx:p.center[0],cy:p.center[1],
+          r0:p.r0,r1:p.r1,
+          a0:p.a0,
+          da:shortestAngleDelta(p.a0,p.a1)
+        }
+  }));
 }
 
 function orbitPoint(m,t){
@@ -822,27 +787,17 @@ function orbitPoint(m,t){
   const p=m.path;
   if(!p) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
 
-  if(p.kind==='track'){
+  if(p.kind==='track' || p.kind==='viewTrack'){
+    // Track paths never change radius. Their centers ride the gray circle line
+    // from the very first pixel of the gesture through the endpoint.
     const a=p.a0+p.da*t;
     return {x:p.cx+Math.cos(a)*p.r,y:p.cy+Math.sin(a)*p.r};
   }
 
-  if(p.kind==='viewTrack' || p.kind==='viewSwitch'){
-    // Travel by actual arc length so switching circles remains continuous and
-    // does not visibly accelerate at the intersection.
-    let target=t*p.totalLength;
-    for(let i=0;i<p.segments.length;i++){
-      const seg=p.segments[i];
-      if(target<=seg.length || i===p.segments.length-1){
-        const local=Math.max(0,Math.min(1,target/seg.length));
-        const a=seg.a0+seg.da*local;
-        return {x:seg.cx+Math.cos(a)*seg.r,y:seg.cy+Math.sin(a)*seg.r};
-      }
-      target-=seg.length;
-    }
-  }
-
-  if(p.kind==='radial'){
+  if(p.kind==='radial' || p.kind==='viewRadial'){
+    // Axis-facing face-perimeter points rotate exactly like the radial points
+    // of a normal face twist. These are the only whole-view points that move
+    // between the three rings.
     const r=p.r0+(p.r1-p.r0)*t;
     const a=p.a0+p.da*t;
     return {x:p.cx+Math.cos(a)*r,y:p.cy+Math.sin(a)*r};
@@ -888,13 +843,7 @@ function buildDragDotMap(oldIds,newIds,move){
   }
 
   if(move.whole){
-    const direction=wholeViewDirection(raw,g);
-    return raw.map(p => ({
-      dot:p.dot,
-      oldX:p.oldSlot.x,oldY:p.oldSlot.y,
-      newX:p.newSlot.x,newY:p.newSlot.y,
-      path:buildWholeViewRoute(p,direction,g)
-    }));
+    return buildWholeViewPaths(raw,move,g);
   }
 
   const ringIndex=ORBIT_COORD_TO_RING(move.layer ?? 0);
@@ -1808,7 +1757,7 @@ window.__cube = {
       const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
       const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
       const directions=[...new Set(
-        paths.filter(p=>p.path?.kind==='track' || p.path?.kind==='viewTrack' || p.path?.kind==='viewSwitch')
+        paths.filter(p=>p.path?.kind==='track' || p.path?.kind==='viewTrack')
           .map(p=>Math.sign(p.path?.da||0)).filter(Boolean)
       )];
       out[name]={
@@ -1842,20 +1791,24 @@ window.__cube = {
         const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
         const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
         const directions=[...new Set(paths.map(p=>Math.sign(p.path?.da||0)).filter(Boolean))];
-        const networkOnly=paths.every(p=>
-          p.path?.kind==='viewTrack' || p.path?.kind==='viewSwitch'
-        );
-        const maxSegments=paths.reduce((mx,p)=>Math.max(mx,p.path?.segments?.length||0),0);
+        const ringCounts=paths
+          .filter(p=>p.path?.kind==='viewTrack')
+          .reduce((a,p)=>{
+            const k=p.path.ringIndex;
+            a[k]=(a[k]||0)+1;
+            return a;
+          },{});
         out[visualAxis+(desiredDir>0?'+':'-')]={
-          moving:paths.length,paths:counts,
-          orbitDirections:directions,directionCoherent:directions.length<=1,
-          networkOnly,maxSegments
+          moving:paths.length,paths:counts,ringCounts,
+          orbitDirections:directions,directionCoherent:directions.length<=1
         };
       }
     }
     return {
       ok:Object.values(out).every(x=>
-        x.moving===52 && x.paths.viewTrack===44 && x.paths.viewSwitch===8 &&
+        x.moving===52 &&
+        x.paths.viewTrack===36 && x.paths.viewRadial===16 &&
+        x.ringCounts?.[0]===12 && x.ringCounts?.[1]===12 && x.ringCounts?.[2]===12 &&
         x.directionCoherent
       ),
       turns:out
