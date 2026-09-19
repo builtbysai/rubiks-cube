@@ -12,9 +12,10 @@ This file documents the interaction behavior measured from the supplied referenc
 ## Face turns
 
 - A quarter-turn moves exactly 20 sticker points.
-- All moving points sweep around the same active axis center.
-- Within one turn, all 20 points use one angular direction.
-- Reverse turns reverse that direction as a group.
+- Twelve adjacent-strip stickers remain locked to the active gray circle track.
+- Those 12 track stickers sweep together in one angular direction.
+- The eight perimeter stickers on the rotating face move through radial space between rings.
+- Reverse turns reverse the track sweep direction.
 - The 3D layer angle is the source of truth for orbit progress.
 - A layer at 25%, 50%, 75%, or 100% of a quarter-turn means the orbit is at exactly the same normalized progress.
 - The orbit must not maintain an independent smoothing or catch-up timeline.
@@ -40,9 +41,9 @@ Manual direct manipulation is different:
 
 ## Direction rule
 
-Never choose clockwise/counter-clockwise independently for each sticker.
+Never let the 12 stickers riding the active circle choose conflicting directions.
 
-Build all source/destination paths first, choose one direction for the move, then apply that direction to every moving point. The chosen direction should minimize total angular travel while preserving the move's exact endpoint state.
+Build all source/destination paths first, identify the 12 track-constrained stickers, choose one sweep direction for that circle, and lock their radius to the rendered track. The eight face-perimeter stickers use the measured radial/polar interpolation between their exact endpoint nodes.
 
 ## Regression expectations
 
