@@ -738,6 +738,11 @@ function orbitPoint(m,t){
   return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
 }
 
+function normalizedTurnProgress(angle,quarterAngle){
+  if(!quarterAngle) return 0;
+  return Math.max(0,Math.min(1,angle/quarterAngle));
+}
+
 function buildDragDotMap(oldIds,newIds,move){
   const slotMap=getOrbitSlotMap();
   if(!slotMap || slotMap.length!==54 || !orbitDots || orbitDots.length!==54) return null;
@@ -780,8 +785,6 @@ function updateLayerDrag(curX, curY){
   // 155px drag = 90 degrees. The orbit reads this exact angle on the same frame.
   const progress = Math.max(0, Math.min(1, dist / 155));
   const angle = layerDrag.dir * progress * (Math.PI/2);
-  // Pointer input can arrive unevenly, especially on touch. Smooth the visual
-  // timeline while keeping it responsive enough to scrub backwards.
   layerDrag.currentAngle = angle;
   // Direct manipulation: no secondary smoothing state. The 3D layer transform
   // is the source of truth that the orbit reads on the same frame.
@@ -1204,7 +1207,7 @@ window.addEventListener('keydown', e => {
   if (!MOVES[k] || inputLocked() || busy()) return;
   hideWin();
   const token = e.shiftKey ? k + "'" : k;
-  queue.push({ ...parseMove(token), duration:500, record:true });
+  enqueueMove({ ...parseMove(token), duration:500, record:true });
   noteActivity();
 });
 
@@ -1439,26 +1442,28 @@ function drawOrbit(){
   const motion = layerDrag && layerDrag.dotMap
     ? {
         map:layerDrag.dotMap,
-        t:Math.max(0, Math.min(1,
-          layerDrag.pivot.rotation[layerDrag.axis] / (layerDrag.pathAngle || Math.PI/2)
-        ))
+        t:normalizedTurnProgress(
+          layerDrag.pivot.rotation[layerDrag.axis],
+          layerDrag.pathAngle || Math.PI/2
+        )
       }
     : active && active.orbitMap
       ? {
           map:active.orbitMap,
-          t:Math.max(0, Math.min(1,
-            active.pivot.rotation[active.axis] /
-            (active.orbitBaseAngle || active.angle || Math.PI/2)
-          ))
+          t:normalizedTurnProgress(
+            active.pivot.rotation[active.axis],
+            active.orbitBaseAngle || active.angle || Math.PI/2
+          )
         }
       : viewDrag && viewDrag.dotMap
         ? {map:viewDrag.dotMap,t:currentViewProgress(viewDrag)}
         : viewSnap && viewSnap.dotMap
           ? {
               map:viewSnap.dotMap,
-              t:Math.max(0,Math.min(1,
-                viewSnap.displayAngle/(viewSnap.dir*Math.PI/2)
-              ))
+              t:normalizedTurnProgress(
+                viewSnap.displayAngle,
+                viewSnap.dir*Math.PI/2
+              )
             }
           : null;
 
@@ -1626,12 +1631,14 @@ window.__cube = {
     if (layerDrag){
       const angle=layerDrag.pivot.rotation[layerDrag.axis];
       const denom=layerDrag.pathAngle || Math.PI/2;
-      return {mode:'drag', angle, cubeProgress:angle/denom, orbitProgress:angle/denom};
+      const p=normalizedTurnProgress(angle,denom);
+      return {mode:'drag', angle, cubeProgress:p, orbitProgress:p};
     }
     if (active){
       const angle=active.pivot.rotation[active.axis];
       const denom=active.orbitBaseAngle || active.angle || Math.PI/2;
-      return {mode:'active', angle, cubeProgress:angle/denom, orbitProgress:angle/denom};
+      const p=normalizedTurnProgress(angle,denom);
+      return {mode:'active', angle, cubeProgress:p, orbitProgress:p};
     }
     return {mode:'idle', cubeProgress:0, orbitProgress:0};
   },
