@@ -194,7 +194,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 /* ---------------------------------- model ---------------------------------- */
 
-const FACE_COLORS = { U:0xfff000, D:0xff1717, F:0xff20cc, B:0x00df3b, R:0x18dce8, L:0x1737d7 };
+const FACE_COLORS = { U:0xfff000, D:0xff1717, F:0xff20cc, B:0x1737d7, R:0x18dce8, L:0x00df3b };
 
 // Face order for the solver string is URFDLB. Each entry: outward normal n,
 // screen-up u and screen-right r when looking straight at the face.
@@ -982,7 +982,7 @@ window.addEventListener('keydown', e => {
 // each with 3 concentric rings. The reference shows the solved cube; dots
 // sit exactly where rings from different centers cross.
 
-const ORBIT_CSS = { U:'#fff000', D:'#ff1717', F:'#ff20cc', B:'#00df3b', R:'#18dce8', L:'#1737d7' };
+const ORBIT_CSS = { U:'#fff000', D:'#ff1717', F:'#ff20cc', B:'#1737d7', R:'#18dce8', L:'#00df3b' };
 
 const orbitPanel = document.getElementById('orbitPanel');
 const orbitCanvas = document.getElementById('orbit');
@@ -1104,11 +1104,11 @@ function getOrbitGeometry(){
 // Map each slot to a face color for the SOLVED state.
 // The 6 (pair, side) groups correspond to the 6 faces.
 // Assignment matches the reference image positions.
-const ORBIT_FAMILY_FOR_AXIS = {x:'L', y:'T', z:'R'};
-const ORBIT_AXIS_FOR_FAMILY = {L:'x', T:'y', R:'z'};
+const ORBIT_FAMILY_FOR_AXIS = {x:'R', y:'T', z:'L'};
+const ORBIT_AXIS_FOR_FAMILY = {R:'x', T:'y', L:'z'};
 const ORBIT_FACE_FOR_GROUP = {
-  TLA:'B', TLB:'R',
-  TRA:'F', TRB:'L',
+  TLA:'L', TLB:'R',
+  TRA:'F', TRB:'B',
   LRA:'D', LRB:'U',
 };
 const ORBIT_GROUP_FOR_FACE = Object.fromEntries(
