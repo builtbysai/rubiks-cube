@@ -374,15 +374,28 @@ canvas.addEventListener('pointermove', e => {
     downInfo.sx = e.clientX; downInfo.sy = e.clientY;
     return;
   }
-  if (downInfo.decided || Math.hypot(dx, dy) < 10) return;
-  decideTurn(dx, dy);
+  // Slow-drag layer twisting (Hans: tactile, not snap)
+  if (layerDrag){
+    updateLayerDrag(e.clientX, e.clientY);
+    return;
+  }
+  if (downInfo.decided || Math.hypot(dx, dy) < 12) return;
+  // Start a layer drag instead of snapping
+  if (busy() || inputLocked()) return;
+  const turn = computeTurn(dx, dy);
+  if (!turn) return;
+  startLayerDrag(turn, downInfo.sx, downInfo.sy);
+  updateLayerDrag(e.clientX, e.clientY);
   downInfo.decided = true;
 });
 
 function endPointer(e){
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch = null;
-  if (pointers.size === 0) downInfo = null;
+  if (pointers.size === 0){
+    if (layerDrag) finishLayerDrag();
+    downInfo = null;
+  }
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -391,9 +404,10 @@ canvas.addEventListener('wheel', e => {
   targetZoomFactor = Math.min(2.5, Math.max(0.5, targetZoomFactor * (1 + e.deltaY*0.001)));
 }, { passive:false });
 
-// Decide which layer turn a drag means: the in-plane axis most aligned with
+// Compute which layer turn a drag means: the in-plane axis most aligned with
 // the drag, then the rotation that carries the grabbed point along the drag.
-function decideTurn(dx, dy){
+// Returns {axis, layer, dir, dragDirX, dragDirY} or null.
+function computeTurn(dx, dy){
   const n = downInfo.normal;
   const center = downInfo.cubie.getWorldPosition(new THREE.Vector3());
   cubeGroup.getWorldQuaternion(_q);
@@ -408,16 +422,73 @@ function decideTurn(dx, dy){
     const len = Math.hypot(sx, sy);
     if (len < 1e-6) continue;
     const dot = (dx*sx + dy*sy) / (Math.hypot(dx, dy) * len);
-    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { axis:a, dot };
+    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { axis:a, dot, sx, sy, len };
   }
-  if (!best) return;
+  if (!best) return null;
   const vv = new THREE.Vector3(); vv[best.axis] = Math.sign(best.dot);
   const omega = new THREE.Vector3().crossVectors(n, vv); // n x t: grabbed point moves along t
   const axis = Math.abs(omega.x) > 0.5 ? 'x' : Math.abs(omega.y) > 0.5 ? 'y' : 'z';
-  enqueueMove({
+  // Drag direction in screen space (normalized)
+  const dragLen = Math.hypot(dx, dy);
+  return {
     axis, layer:Math.round(downInfo.cubie.userData.pos[axis]),
-    dir:Math.sign(omega[axis]), turns:1, duration:190, record:true,
-  });
+    dir:Math.sign(omega[axis]),
+    dragDirX: dx/dragLen, dragDirY: dy/dragLen,
+  };
+}
+// Legacy: decide and enqueue (for buttons/keyboard)
+function decideTurn(dx, dy){
+  const t = computeTurn(dx, dy);
+  if (!t) return;
+  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:190, record:true});
+  noteActivity();
+}
+// Start a slow-drag: create pivot, attach cubies, track drag
+function startLayerDrag(turn, startX, startY){
+  const pivot = new THREE.Group();
+  cubeGroup.add(pivot);
+  const cubies = [];
+  for (const ch of cubeGroup.children){
+    if (ch === pivot || !ch.userData.pos) continue;
+    if (Math.round(ch.userData.pos[turn.axis]) === turn.layer) cubies.push(ch);
+  }
+  for (const ch of cubies) pivot.add(ch);
+  layerDrag = {pivot, cubies, axis:turn.axis, layer:turn.layer, dir:turn.dir,
+               startX, startY, dirX:turn.dragDirX, dirY:turn.dragDirY};
+}
+// Update layer drag from current pointer position
+function updateLayerDrag(curX, curY){
+  if (!layerDrag) return;
+  const dx = curX - layerDrag.startX, dy = curY - layerDrag.startY;
+  // Project drag onto the turn direction
+  const dist = dx*layerDrag.dirX + dy*layerDrag.dirY;
+  // 140px drag = 90 degrees (tunable)
+  const angle = layerDrag.dir * (dist / 140) * (Math.PI/2);
+  layerDrag.pivot.rotation[layerDrag.axis] = angle;
+  layerDrag.currentAngle = angle;
+}
+// Finish layer drag: snap to nearest 90deg, animate, then settle
+function finishLayerDrag(){
+  if (!layerDrag) return;
+  const {pivot, cubies, axis, dir, currentAngle} = layerDrag;
+  // Snap to nearest 90 degrees
+  const quarterTurns = Math.round((currentAngle || 0) / (Math.PI/2));
+  const targetAngle = quarterTurns * (Math.PI/2);
+  const actualTurns = Math.abs(quarterTurns) % 4;
+  // If snapped to 0 (no meaningful turn), just put cubies back
+  if (actualTurns === 0){
+    for (const ch of cubies) cubeGroup.add(ch);
+    cubeGroup.remove(pivot);
+    layerDrag = null;
+    return;
+  }
+  // Animate from current to target, then finish as a move
+  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:160, record:true};
+  // Set up as an active move starting from current angle
+  const startAngle = currentAngle || 0;
+  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.16, move,
+            fromAngle:startAngle, isDragFinish:true};
+  layerDrag = null;
   noteActivity();
 }
 
@@ -425,6 +496,7 @@ function decideTurn(dx, dy){
 
 const queue = [];
 let active = null;      // {pivot, cubies, axis, angle, t, dur, move}
+let layerDrag = null;   // {pivot, cubies, axis, layer, dir, startX, startY, dirX, dirY} for slow-drag
 const history = [];
 let solving = false;    // solver playback in progress
 let solverBusy = false; // solver thinking (worker)
@@ -432,7 +504,7 @@ let suppressWin = false;
 let solveToken = 0;
 
 function inputLocked(){ return solving || solverBusy; }
-function busy(){ return active || queue.length > 0; }
+function busy(){ return active || layerDrag || queue.length > 0; }
 
 function enqueueMove(m){ queue.push(m); }
 
@@ -1109,7 +1181,12 @@ function loop(now){
   if (active){
     active.t += dt;
     const k = Math.min(1, active.t / active.dur);
-    active.pivot.rotation[active.axis] = active.angle * easeInOut(k);
+    // For drag-finish, interpolate from fromAngle to angle
+    if (active.fromAngle !== undefined){
+      active.pivot.rotation[active.axis] = active.fromAngle + (active.angle - active.fromAngle) * easeInOut(k);
+    } else {
+      active.pivot.rotation[active.axis] = active.angle * easeInOut(k);
+    }
     if (k >= 1) finishMove();
   } else if (queue.length){
     startMove(queue.shift());
