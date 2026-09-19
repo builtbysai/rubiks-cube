@@ -13,8 +13,8 @@ const MOVES = {
   U:{axis:'y',layer: 1,dir:-1}, D:{axis:'y',layer:-1,dir: 1},
   F:{axis:'z',layer: 1,dir:-1}, B:{axis:'z',layer:-1,dir: 1},
 };
-const FAMILY={x:'L',y:'T',z:'R'};
-const FACE_FOR_GROUP={TLA:'B',TLB:'R',TRA:'F',TRB:'L',LRA:'D',LRB:'U'};
+const FAMILY={x:'R',y:'T',z:'L'};
+const FACE_FOR_GROUP={TLA:'L',TLB:'R',TRA:'F',TRB:'B',LRA:'D',LRB:'U'};
 const GROUP_FOR_FACE=Object.fromEntries(Object.entries(FACE_FOR_GROUP).map(([k,v])=>[v,k]));
 const ring=v=>1-v;
 
