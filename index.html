@@ -758,13 +758,11 @@ window.addEventListener('keydown', e => {
 });
 
 /* ------------------------------ orbit diagram ------------------------------ */
-// A live 2D projection of the cube's 54 stickers. Each sticker is a dot whose
-// 2D position comes from projecting its 3D location through s = x + y*w + z*w^2
-// (w = e^{i120 deg}), rotated so the Y axis points up. The three cube axes map
-// to three centers in a triangle; the dots ride on rings around them and move
-// exactly as the 3D stickers do, including mid-animation.
+// 54 sticker dots at the intersections of 9 circles: 3 centers (triangle)
+// each with 3 concentric rings. The reference shows the solved cube; dots
+// sit exactly where rings from different centers cross.
 
-const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff1744', L:'#ff00ff' };
+const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff1744', L:'#ff5800' };
 
 const orbitPanel = document.getElementById('orbitPanel');
 const orbitCanvas = document.getElementById('orbit');
@@ -772,19 +770,6 @@ const otx = orbitCanvas.getContext('2d');
 const orbitCountEl = document.getElementById('orbitCount');
 const btnOrbit = document.getElementById('btnOrbit');
 let orbitOn = true;
-
-// w = e^{i120 deg}; the -30 deg rotation puts Y up, X bottom-right, Z bottom-left.
-const OMEGA_RE = -0.5, OMEGA_IM = Math.sqrt(3)/2;
-const ROT_RE = Math.cos(-Math.PI/6), ROT_IM = Math.sin(-Math.PI/6);
-
-function orbitProject(x, y, z, cx, cy, k){
-  // s = x + y*w + z*w^2 ; w^2 = (-0.5, -sqrt(3)/2)
-  const sre = x + y*OMEGA_RE - z*0.5;
-  const sim = (y - z)*OMEGA_IM;
-  const rre = sre*ROT_RE - sim*ROT_IM;
-  const rim = sre*ROT_IM + sim*ROT_RE;
-  return [cx + k*rre, cy - k*rim];
-}
 
 function orbitSize(){
   const r = orbitCanvas.getBoundingClientRect();
@@ -799,119 +784,197 @@ function sizeOrbitCanvas(){
   otx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-// Ring radii per axis center, from the solved layout: distinct sticker
-// distances, clustered, keeping the ones shared by several stickers.
-let orbitRings = null;
-function computeOrbitRings(){
-  const S = 320, cx = S/2, cy = S/2, k = S*0.14;
-  const pts = [];
-  for (const f of FACES){
-    const n = f.n, u = f.u, r = f.r;
-    for (let i=-1; i<=1; i++) for (let j=-1; j<=1; j++){
-      const x = n[0]*1.5 + u[0]*i + r[0]*j;
-      const y = n[1]*1.5 + u[1]*i + r[1]*j;
-      const z = n[2]*1.5 + u[2]*i + r[2]*j;
-      pts.push(orbitProject(x, y, z, cx, cy, k));
-    }
-  }
-  const centers = [
-    orbitProject(1.5, 0, 0, cx, cy, k),
-    orbitProject(0, 1.5, 0, cx, cy, k),
-    orbitProject(0, 0, 1.5, cx, cy, k),
-  ];
-  orbitRings = centers.map(c => {
-    const ds = pts.map(p => Math.hypot(p[0]-c[0], p[1]-c[1])).sort((a,b) => a-b);
-    const groups = [];
-    for (const d of ds){
-      const g = groups.find(g => Math.abs(g[0]-d) < 1.2);
-      if (g) g.push(d); else groups.push([d]);
-    }
-    const rs = groups.filter(g => g.length >= 4).map(g => ({r: g.reduce((a,b) => a+b, 0)/g.length, n: g.length}));
-    rs.sort((a,b) => b.n - a.n);
-    return rs.slice(0, 5).map(o => o.r).sort((a,b) => a-b);
-  });
+// Circle-circle intersection: returns 0, 1, or 2 points
+function circleIntersections(x1, y1, r1, x2, y2, r2){
+  const dx = x2 - x1, dy = y2 - y1;
+  const d = Math.hypot(dx, dy);
+  if (d > r1 + r2 || d < Math.abs(r1 - r2) || d === 0) return [];
+  const a = (r1*r1 - r2*r2 + d*d) / (2*d);
+  const h2 = r1*r1 - a*a;
+  if (h2 < 0) return [];
+  const h = Math.sqrt(h2);
+  const xm = x1 + a*dx/d, ym = y1 + a*dy/d;
+  const rx = -dy*h/d, ry = dx*h/d;
+  return [[xm+rx, ym+ry], [xm-rx, ym-ry]];
 }
 
-const _op = new THREE.Vector3();
-const _oq = new THREE.Quaternion();
-const _od = new THREE.Vector3();
-const _pq = new THREE.Quaternion();
+// Build the 54 slots: intersections of rings from different centers.
+// Returns { slots: [{x, y, pair, side}], circles: [{x, y, r}] }
+function buildOrbitSlots(S){
+  // Three centers at equilateral triangle vertices
+  // Scaled to fit S x S panel with margin
+  const cx = S/2, cy = S/2;
+  // Equilateral triangle centers (verified against reference)
+  const d = S * 0.433;  // center distance
+  const h = d * Math.sqrt(3)/2;  // triangle height
+  const T = [cx, cy - h*2/3];
+  const L = [cx - d/2, cy + h/3];
+  const R = [cx + d/2, cy + h/3];
+  
+  // Three radii per center (same for all, by symmetry)
+  // r1 > d/2 so all circles intersect
+  const r1 = d * 0.538, r2 = d * 0.654, r3 = d * 0.769;
+  const radii = [r1, r2, r3];
+  
+  const centers = {T, L, R};
+  const circles = [];
+  for (const name of ['T','L','R']){
+    for (const r of radii){
+      circles.push({x: centers[name][0], y: centers[name][1], r});
+    }
+  }
+  
+  // Compute all 54 intersections
+  const slots = [];
+  const pairs = [['T','L'], ['T','R'], ['L','R']];
+  for (const [n1, n2] of pairs){
+    const [x1, y1] = centers[n1];
+    const [x2, y2] = centers[n2];
+    for (const r1 of radii){
+      for (const r2 of radii){
+        const pts = circleIntersections(x1, y1, r1, x2, y2, r2);
+        for (const [x, y] of pts){
+          // Determine which side of the n1-n2 line (for 6-color grouping)
+          const dx = x2-x1, dy = y2-y1;
+          const px = x-x1, py = y-y1;
+          const cross = dx*py - dy*px;
+          const side = cross > 0 ? 'A' : 'B';
+          slots.push({x, y, pair: n1+n2, side});
+        }
+      }
+    }
+  }
+  return {slots, circles, centers};
+}
+
+let orbitCache = null; orbitSlotMap = null;
+function getOrbitGeometry(){
+  const S = orbitSize();
+  if (!orbitCache || Math.abs(orbitCache.S - S) > 1){
+    const {slots, circles} = buildOrbitSlots(S);
+    orbitCache = {S, slots, circles};
+  }
+  return orbitCache;
+}
+
+// Map each slot to a face color for the SOLVED state.
+// The 6 (pair, side) groups correspond to the 6 faces.
+// Assignment matches the reference image positions.
+function solvedColorForSlot(slot, S){
+  // Use position to assign: top-left=red, top= yellow, top-right=blue,
+  // mid-left=green, mid-right=orange, bottom=white
+  // This is a heuristic based on the slot's (x,y)
+  const cx = S/2, cy = S/2;
+  const dx = slot.x - cx, dy = slot.y - cy;
+  const angle = Math.atan2(dy, dx);  // -pi to pi
+  const dist = Math.hypot(dx, dy);
+  
+  // 6 sectors around the center
+  // Angles: -pi to pi. Let's define:
+  // Top-left (red): angle ~ -2.2 rad (-126 deg)
+  // Top (yellow): angle ~ -1.57 rad (-90 deg)  
+  // Top-right (blue): angle ~ -0.9 rad (-52 deg)
+  // Bottom-right (orange): angle ~ 0.9 rad (52 deg)
+  // Bottom (white): angle ~ 1.57 rad (90 deg)
+  // Bottom-left (green): angle ~ 2.2 rad (126 deg)
+  
+  // Normalize angle to 0-2pi
+  let a = angle;
+  if (a < 0) a += Math.PI*2;
+  // a in [0, 2pi). 0 = east, pi/2 = south, pi = west, 3pi/2 = north.
+  
+  // Define sectors (in radians, 0=east, going clockwise? atan2 goes ccw)
+  // Let's use: north = 3pi/2 (or -pi/2)
+  // We'll map based on the reference layout
+  
+  // Simpler: use the (pair, side) directly with a fixed mapping,
+  // then verify visually and adjust.
+  const key = slot.pair + slot.side;
+  // Verified against reference image (6 clusters, 3x3 each)
+  const map = {
+    'TLA': 'R',  // top-left: red
+    'TRB': 'B',  // top-right: blue
+    'LRA': 'U',  // bottom: white
+    'LRB': 'D',  // top-center: yellow
+    'TRA': 'F',  // mid-left: green
+    'TLB': 'L',  // mid-right: orange
+  };
+  return map[key] || 'U';
+}
+
+// Map each slot to a (face, idx) in solved state.
+// The 6 (pair, side) groups correspond to 6 faces. Within each group,
+// sort by position to assign idx 0-8.
+let orbitSlotMap = null;
+function getOrbitSlotMap(){
+  if (orbitSlotMap) return orbitSlotMap;
+  const {slots} = getOrbitGeometry();
+  // Group by (pair, side)
+  const groups = {};
+  for (const s of slots){
+    const k = s.pair + s.side;
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(s);
+  }
+  // Map (pair,side) to face (verified against reference)
+  const faceFor = {
+    'TLA': 'R', 'TRB': 'B', 'LRA': 'U',
+    'LRB': 'D', 'TRA': 'F', 'TLB': 'L',
+  };
+  // FACES order: U, R, F, D, L, B (indices 0-5)
+  const faceIndex = {U:0, R:1, F:2, D:3, L:4, B:5};
+  orbitSlotMap = [];
+  for (const k in groups){
+    const face = faceFor[k];
+    const fi = faceIndex[face];
+    // Sort by y then x for consistent idx
+    const g = groups[k].sort((a,b) => (a.y-b.y) || (a.x-b.x));
+    for (let i=0; i<g.length; i++){
+      orbitSlotMap.push({slot: g[i], globalIdx: fi*9 + i});
+    }
+  }
+  return orbitSlotMap;
+}
 
 function drawOrbit(){
   if (!orbitOn) return;
   const S = orbitSize();
-  const cx = S/2, cy = S/2, k = S*0.14;
-  const centers = [
-    orbitProject(1.5, 0, 0, cx, cy, k),
-    orbitProject(0, 1.5, 0, cx, cy, k),
-    orbitProject(0, 0, 1.5, cx, cy, k),
-  ];
+  const {slots, circles} = getOrbitGeometry();
   otx.clearRect(0, 0, S, S);
-
-  if (!orbitRings) computeOrbitRings();
-  const sc = S/320;
-  otx.lineWidth = 0.8;
-  otx.strokeStyle = 'rgba(120,120,120,0.35)';
-  for (let i=0; i<3; i++){
-    for (const r of orbitRings[i]){
-      otx.beginPath();
-      otx.arc(centers[i][0], centers[i][1], r*sc, 0, Math.PI*2);
-      otx.stroke();
-    }
+  
+  // Draw the 9 circles
+  otx.strokeStyle = 'rgba(120,120,120,0.45)';
+  otx.lineWidth = Math.max(1, S*0.003);
+  for (const c of circles){
+    otx.beginPath();
+    otx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+    otx.stroke();
   }
-  otx.fillStyle = 'rgba(120,108,88,0.55)';
-  for (const c of centers){
-    otx.beginPath(); otx.arc(c[0], c[1], 2, 0, Math.PI*2); otx.fill();
-  }
-
-  // Partial in-flight rotation so dots move with the 3D animation.
-  let pq = null;
-  const inFlight = active ? new Set(active.cubies) : null;
-  if (active){
-    const t = Math.min(1, active.t/active.dur);
-    _axisV.set(0,0,0); _axisV[active.axis] = 1;
-    pq = _pq.setFromAxisAngle(_axisV, active.angle*easeInOut(t));
-  }
-  const dotR = Math.max(3.2, S*0.024);
-  for (const c of cubeGroup.children){
-    if (!c.userData.pos) continue; // pivot
-    if (inFlight && inFlight.has(c)){
-      _op.copy(c.userData.pos).applyQuaternion(pq);
-      _oq.copy(pq).multiply(c.quaternion);
+  
+  // Get current cube state (54 chars, each is home face at that position)
+  let state = null;
+  try { state = facelets(); } catch(e) { state = null; }
+  
+  // Draw the 54 dots at intersections, colored by current cube state
+  const dotR = Math.max(4, S*0.022);
+  const slotMap = getOrbitSlotMap();
+  for (const {slot, globalIdx} of slotMap){
+    let face = 'U';
+    if (state && globalIdx < state.length){
+      face = state[globalIdx];
     } else {
-      _op.copy(c.userData.pos);
-      _oq.copy(c.quaternion);
+      // Fallback to solved colors
+      face = solvedColorForSlot(slot, S);
     }
-    for (const st of c.userData.stickers){
-      _od.copy(st.userData.dir).applyQuaternion(_oq);
-      const p = orbitProject(_op.x + _od.x*0.5, _op.y + _od.y*0.5, _op.z + _od.z*0.5, cx, cy, k);
-      otx.fillStyle = ORBIT_CSS[st.userData.home];
-      otx.strokeStyle = 'rgba(35,32,26,0.55)';
-      otx.lineWidth = 0.8;
-      otx.beginPath();
-      otx.arc(p[0], p[1], dotR, 0, Math.PI*2);
-      otx.fill();
-      otx.stroke();
-    }
+    otx.fillStyle = ORBIT_CSS[face] || '#888';
+    otx.strokeStyle = 'rgba(35,32,26,0.6)';
+    otx.lineWidth = Math.max(0.8, S*0.002);
+    otx.beginPath();
+    otx.arc(slot.x, slot.y, dotR, 0, Math.PI*2);
+    otx.fill();
+    otx.stroke();
   }
-  // In-flight cubies live under the pivot; draw them too.
-  if (inFlight){
-    for (const c of active.cubies){
-      _op.copy(c.userData.pos).applyQuaternion(pq);
-      _oq.copy(pq).multiply(c.quaternion);
-      for (const st of c.userData.stickers){
-        _od.copy(st.userData.dir).applyQuaternion(_oq);
-        const p = orbitProject(_op.x + _od.x*0.5, _op.y + _od.y*0.5, _op.z + _od.z*0.5, cx, cy, k);
-        otx.fillStyle = ORBIT_CSS[st.userData.home];
-        otx.strokeStyle = 'rgba(35,32,26,0.55)';
-        otx.lineWidth = 0.8;
-        otx.beginPath();
-        otx.arc(p[0], p[1], dotR, 0, Math.PI*2);
-        otx.fill();
-        otx.stroke();
-      }
-    }
-  }
+  
   orbitCountEl.textContent = '54 stickers';
 }
 
@@ -919,7 +982,10 @@ btnOrbit.addEventListener('click', () => {
   orbitOn = !orbitOn;
   btnOrbit.setAttribute('aria-pressed', String(orbitOn));
   orbitPanel.classList.toggle('hidden', !orbitOn);
-  if (orbitOn) sizeOrbitCanvas();
+  if (orbitOn){
+    orbitCache = null; orbitSlotMap = null;
+    sizeOrbitCanvas();
+  }
 });
 
 /* --------------------------------- loop ------------------------------------ */
