@@ -183,7 +183,9 @@ for(const oriented of orientations){
 // between rings.
 for(const [name,m] of Object.entries(MOVES)){
   const ss=stickers();
-  const activeCircle=FAMILY[m.axis]+ring(m.layer);
+  const family=FAMILY[m.axis];
+  const center=g.centers[family];
+  const activeRadius=g.radii[ring(m.layer)];
   let trackCount=0, radialCount=0;
   for(const s of ss){
     const ai={x:0,y:1,z:2}[m.axis];
@@ -192,7 +194,9 @@ for(const [name,m] of Object.entries(MOVES)){
     const p=rotate(s.p,m.axis,m.dir);
     const n=rotate(s.n,m.axis,m.dir);
     const after=nodeFor(p,n,g);
-    if(before.circles.includes(activeCircle) && after.circles.includes(activeCircle)) trackCount++;
+    const r0=Math.hypot(before.x-center[0],before.y-center[1]);
+    const r1=Math.hypot(after.x-center[0],after.y-center[1]);
+    if(Math.abs(r0-activeRadius)<1e-6 && Math.abs(r1-activeRadius)<1e-6) trackCount++;
     else radialCount++;
   }
   assert.equal(trackCount,12,name+' should keep 12 stickers on the active circle track');
