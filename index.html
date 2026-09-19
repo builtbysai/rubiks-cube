@@ -756,6 +756,339 @@
     #orbitPanel{width:108px;top:8px;left:8px;padding:6px;}
     #solveTray{width:390px;right:8px;bottom:8px;padding:10px;}
   }
+
+  /* === HUD + fixed minimap + action dock refinement === */
+  body{
+    grid-template-rows:auto minmax(0,1fr) auto;
+  }
+
+  .topbar{
+    width:min(1180px,calc(100% - 28px));
+    min-height:62px;
+    margin:0 auto;
+    padding:10px 2px 8px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    min-width:0;
+  }
+  .brandIcon{
+    width:30px;
+    height:30px;
+    flex:none;
+    fill:none;
+    stroke:var(--ink);
+    stroke-width:1.45;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+  .brandText h1{
+    margin:0;
+    font-size:17px;
+    line-height:1.05;
+    letter-spacing:-.025em;
+    font-weight:760;
+  }
+  .brandText span{
+    display:block;
+    margin-top:3px;
+    color:var(--ink-faint);
+    font-size:8.5px;
+    font-weight:720;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+  }
+
+  .hud{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    min-height:42px;
+    padding:6px 10px;
+    border:1px solid var(--line);
+    border-radius:15px;
+    background:rgba(255,253,248,.58);
+    box-shadow:0 5px 18px rgba(55,47,34,.045),inset 0 1px 0 rgba(255,255,255,.75);
+    backdrop-filter:blur(16px);
+  }
+  .hudMetric{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    min-width:67px;
+  }
+  .hudMetric svg{
+    width:17px;
+    height:17px;
+    flex:none;
+    fill:none;
+    stroke:var(--ink-soft);
+    stroke-width:1.6;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+  .hudMetric div{
+    display:flex;
+    flex-direction:column;
+    gap:1px;
+  }
+  .hudMetric span{
+    color:var(--ink-faint);
+    font-size:7.5px;
+    line-height:1;
+    font-weight:760;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+  }
+  .hudMetric strong{
+    min-width:35px;
+    font-size:15px;
+    line-height:1.08;
+    letter-spacing:-.02em;
+    font-weight:760;
+    font-variant-numeric:tabular-nums;
+  }
+  .hudDivider{
+    width:1px;
+    height:25px;
+    background:var(--line);
+  }
+
+  #workspace{
+    width:min(1180px,calc(100% - 28px));
+  }
+  #stage{
+    border-radius:24px;
+  }
+
+  #orbitPanel{
+    top:14px;
+    left:14px;
+    width:clamp(120px,13.5vw,166px);
+    aspect-ratio:1;
+    padding:11px;
+    display:grid;
+    place-items:center;
+    border-radius:18px;
+    pointer-events:none;
+    background:rgba(255,253,248,.70);
+    border:1px solid rgba(82,72,55,.12);
+    box-shadow:0 10px 30px rgba(55,47,34,.075);
+  }
+  #orbitPanel.hidden{
+    display:grid;
+    opacity:0;
+    transform:scale(.96);
+  }
+  #orbit{
+    width:100%;
+    height:auto;
+    aspect-ratio:1;
+    margin:0;
+    display:block;
+    pointer-events:none;
+  }
+  #orbitTitle,#orbitHint{display:none!important;}
+
+  footer{
+    width:min(1180px,calc(100% - 28px));
+    margin:0 auto;
+    padding:7px 0 max(10px,env(safe-area-inset-bottom));
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+  }
+  .quickTurns{
+    width:min(560px,100%);
+    opacity:.82;
+    transition:opacity .15s ease;
+  }
+  .quickTurns:hover{opacity:1;}
+  #movepad{
+    width:100%;
+    margin:0;
+    gap:4px;
+    grid-template-columns:repeat(6,minmax(38px,1fr));
+  }
+  #movepad button{
+    min-height:28px;
+    padding:3px 0;
+    border-radius:8px;
+    background:rgba(255,253,248,.45);
+    border-color:rgba(82,72,55,.10);
+    box-shadow:none;
+    color:var(--ink-soft);
+    font-size:10px;
+    font-weight:700;
+  }
+  #movepad button:hover{
+    background:rgba(255,255,255,.84);
+    color:var(--ink);
+    transform:none;
+  }
+  .quickTurns .hint{
+    margin-top:4px;
+    padding:0;
+    color:var(--ink-faint);
+    font-size:9px;
+    line-height:1.2;
+  }
+
+  .actionDock{
+    display:grid;
+    grid-template-columns:repeat(5,72px);
+    gap:4px;
+    padding:5px;
+    border:1px solid var(--line);
+    border-radius:19px;
+    background:rgba(255,253,248,.78);
+    box-shadow:0 12px 34px rgba(55,47,34,.085),inset 0 1px 0 rgba(255,255,255,.8);
+    backdrop-filter:blur(18px);
+  }
+  .dockAction{
+    min-width:0;
+    min-height:52px;
+    padding:6px 4px 5px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    border:0;
+    border-radius:14px;
+    background:transparent;
+    box-shadow:none;
+    color:var(--ink-soft);
+    font-size:9px;
+    font-weight:720;
+  }
+  .dockAction svg{
+    width:21px;
+    height:21px;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.65;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+  .dockAction span{
+    line-height:1;
+  }
+  .dockAction:hover{
+    background:rgba(255,255,255,.78);
+    box-shadow:none;
+    color:var(--ink);
+    transform:none;
+  }
+  .dockAction:active{
+    background:rgba(82,72,55,.08);
+    transform:scale(.97);
+  }
+  .dockAction.primaryAction{
+    background:var(--ink);
+    color:#fffaf0;
+    box-shadow:0 5px 16px rgba(35,32,26,.16);
+  }
+  .dockAction.primaryAction:hover{
+    background:#343028;
+    color:#fffaf0;
+  }
+  #btnOrbit[aria-pressed="true"]{
+    background:rgba(183,18,52,.075);
+    color:#98142f;
+    border:0;
+  }
+
+  @media (max-width:760px){
+    .topbar{
+      width:calc(100% - 16px);
+      min-height:52px;
+      padding:7px 0 6px;
+    }
+    .brandIcon{width:25px;height:25px;}
+    .brandText h1{font-size:15px;}
+    .brandText span{display:none;}
+    .hud{
+      gap:8px;
+      min-height:37px;
+      padding:5px 8px;
+      border-radius:12px;
+    }
+    .hudMetric{
+      gap:5px;
+      min-width:53px;
+    }
+    .hudMetric svg{width:14px;height:14px;}
+    .hudMetric span{font-size:6.5px;}
+    .hudMetric strong{font-size:13px;min-width:29px;}
+    .hudDivider{height:21px;}
+
+    #workspace{width:calc(100% - 12px);}
+    #stage{border-radius:18px;}
+    #orbitPanel{
+      top:9px;
+      left:9px;
+      width:105px;
+      padding:7px;
+      border-radius:14px;
+    }
+
+    footer{
+      width:100%;
+      padding:5px 6px max(7px,env(safe-area-inset-bottom));
+      gap:4px;
+    }
+    .quickTurns{
+      width:min(440px,calc(100% - 8px));
+    }
+    .quickTurns .hint{display:none;}
+    #movepad{gap:2px;}
+    #movepad button{
+      min-height:25px;
+      font-size:9px;
+      border-radius:6px;
+    }
+    .actionDock{
+      width:min(390px,100%);
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:2px;
+      padding:4px;
+      border-radius:16px;
+    }
+    .dockAction{
+      min-height:48px;
+      padding:5px 2px 4px;
+      border-radius:12px;
+      font-size:8px;
+    }
+    .dockAction svg{width:19px;height:19px;}
+  }
+
+  @media (max-width:390px){
+    .brandIcon{display:none;}
+    .hud{gap:6px;padding-inline:7px;}
+    .hudMetric{min-width:48px;}
+    #orbitPanel{width:94px;padding:6px;}
+    .dockAction span{font-size:7.5px;}
+  }
+
+  @media (max-height:620px) and (min-width:700px){
+    .topbar{min-height:44px;padding:5px 0 4px;}
+    .brandText span{display:none;}
+    #orbitPanel{width:94px;top:8px;left:8px;padding:6px;}
+    footer{padding:3px 0 5px;gap:3px;}
+    .quickTurns .hint{display:none;}
+    #movepad button{min-height:23px;}
+    .actionDock{grid-template-columns:repeat(5,64px);}
+    .dockAction{min-height:42px;}
+  }
 </style>
 <script type="importmap">
 {
@@ -768,15 +1101,34 @@
 </head>
 <body>
 
-<header>
-  <div class="title">
-    <div class="eyebrow">Interactive model</div>
-    <h1>Rubik's Cube</h1>
-    <p>Explore, twist, scramble, and solve with a live orbit projection.</p>
+<header class="topbar">
+  <div class="brand">
+    <svg class="brandIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.7 20 7v10l-8 4.3L4 17V7l8-4.3Z"/>
+      <path d="m4.4 7.2 7.6 4.1 7.6-4.1M12 11.3v9.3"/>
+    </svg>
+    <div class="brandText">
+      <h1>Rubik's Cube</h1>
+      <span>Interactive</span>
+    </div>
   </div>
-  <div class="stats" aria-label="Session statistics">
-    <div class="stat"><div class="v" id="time">0:00</div><div class="k">Time</div></div>
-    <div class="stat"><div class="v" id="moves">0</div><div class="k">Moves</div></div>
+
+  <div class="hud" aria-label="Solve performance">
+    <div class="hudMetric" aria-label="Elapsed time">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="13" r="7.5"/>
+        <path d="M12 9v4.4l3 1.7M9.5 2.8h5M12 5.4V3"/>
+      </svg>
+      <div><span>Time</span><strong id="time">0:00</strong></div>
+    </div>
+    <div class="hudDivider" aria-hidden="true"></div>
+    <div class="hudMetric" aria-label="Move score">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 5.5h10M7 10h10M7 14.5h6M5 5.5h.01M5 10h.01M5 14.5h.01"/>
+        <path d="m15.5 17.2 1.7 1.7 3.2-3.5"/>
+      </svg>
+      <div><span>Moves</span><strong id="moves">0</strong></div>
+    </div>
   </div>
 </header>
 
@@ -785,9 +1137,8 @@
     <canvas id="c"></canvas>
 
     <aside id="orbitPanel" aria-label="Live orbit minimap">
-      <div id="orbitTitle"><span>Orbit</span><span id="orbitCount"></span></div>
       <canvas id="orbit"></canvas>
-      <div id="orbitHint">Live projection</div>
+      <span id="orbitCount" hidden></span>
     </aside>
 
     <section id="solveTray" class="hidden" aria-label="Solution guide" aria-live="polite">
@@ -835,20 +1186,55 @@
 </div>
 
 <footer>
-  <div class="controlShell">
-    <div class="btnrow" aria-label="Cube actions">
-      <button id="btnScramble" class="primary">Scramble</button>
-      <button id="btnSolve">Solve</button>
-      <button id="btnUndo">Undo</button>
-      <button id="btnReset">Reset</button>
-      <button id="btnOrbit" aria-pressed="true">Orbit</button>
-    </div>
-    <div class="turnsBar">Face turns</div>
+  <div class="quickTurns">
     <div id="movepad" aria-label="Face turn controls"></div>
     <div class="hint">
-      Drag a sticker to twist a layer · drag the cube background to rotate face-to-face · scroll or pinch to zoom<br>
-      Keys <kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd> turn faces · hold <kbd>Shift</kbd> to reverse
+      Drag a sticker to twist · drag the background to rotate · scroll or pinch to zoom
     </div>
+  </div>
+
+  <div class="actionDock" role="toolbar" aria-label="Cube actions">
+    <button id="btnScramble" class="dockAction" type="button" aria-label="Scramble cube">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 7h3c4.5 0 5.2 10 10 10h3"/>
+        <path d="m17 14 3 3-3 3M4 17h3c1.7 0 2.8-1.4 3.8-3.2M13.2 9.8C14.1 8.2 15.2 7 17 7h3"/>
+        <path d="m17 4 3 3-3 3"/>
+      </svg>
+      <span>Scramble</span>
+    </button>
+
+    <button id="btnSolve" class="dockAction primaryAction" type="button" aria-label="Solve cube">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8"/>
+        <path d="m8.5 12.2 2.2 2.2 4.8-5"/>
+      </svg>
+      <span>Solve</span>
+    </button>
+
+    <button id="btnUndo" class="dockAction" type="button" aria-label="Undo last move">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 8H5V4"/>
+        <path d="M5.4 8A8 8 0 1 1 6.8 17"/>
+      </svg>
+      <span>Undo</span>
+    </button>
+
+    <button id="btnReset" class="dockAction" type="button" aria-label="Reset cube">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6.2 7.2A8 8 0 1 1 5 15.5"/>
+        <path d="M6 3.8v4.4h4.4"/>
+      </svg>
+      <span>Reset</span>
+    </button>
+
+    <button id="btnOrbit" class="dockAction" type="button" aria-label="Toggle minimap" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="8.2" r="5"/>
+        <circle cx="8.2" cy="14.4" r="5"/>
+        <circle cx="15.8" cy="14.4" r="5"/>
+      </svg>
+      <span>Map</span>
+    </button>
   </div>
 </footer>
 
@@ -2215,27 +2601,7 @@ const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff17
 const orbitPanel = document.getElementById('orbitPanel');
 const orbitCanvas = document.getElementById('orbit');
 const otx = orbitCanvas.getContext('2d');
-// Drag to pan the orbit diagram
-orbitCanvas.style.cursor = 'grab';
-orbitCanvas.addEventListener('pointerdown', (e) => {
-  orbitDragging = true;
-  orbitDragSX = e.clientX; orbitDragSY = e.clientY;
-  orbitPanSX = orbitPanX; orbitPanSY = orbitPanY;
-  orbitCanvas.style.cursor = 'grabbing';
-  orbitCanvas.setPointerCapture(e.pointerId);
-});
-orbitCanvas.addEventListener('pointermove', (e) => {
-  if (!orbitDragging) return;
-  const scale = orbitCanvas.width / orbitCanvas.getBoundingClientRect().width;
-  orbitPanX = orbitPanSX + (e.clientX - orbitDragSX) * scale;
-  orbitPanY = orbitPanSY + (e.clientY - orbitDragSY) * scale;
-});
-const endOrbitDrag = (e) => {
-  orbitDragging = false;
-  orbitCanvas.style.cursor = 'grab';
-};
-orbitCanvas.addEventListener('pointerup', endOrbitDrag);
-orbitCanvas.addEventListener('pointercancel', endOrbitDrag);
+// Fixed minimap: intentionally non-interactive. The cube drives the visualization.
 const orbitCountEl = document.getElementById('orbitCount');
 const btnOrbit = document.getElementById('btnOrbit');
 let orbitOn = true;
@@ -2386,9 +2752,7 @@ function getOrbitSlotMap(){
 // 54 dots, each with fixed home color, current (x,y), and target (tx,ty).
 // Dots move between slots along the circles when the cube turns.
 let orbitDots = null;  // Array of {home, x, y, tx, ty}
-// Pan/drag the orbit diagram (Hans: "slowly drag or move it")
-let orbitPanX = 0, orbitPanY = 0;
-let orbitDragging = false, orbitDragSX = 0, orbitDragSY = 0, orbitPanSX = 0, orbitPanSY = 0;
+// The minimap is fixed in its canvas; there is no user panning offset.
 function drawOrbit(){
   if (!orbitOn) return;
   const S = orbitSize();
@@ -2400,7 +2764,7 @@ function drawOrbit(){
   otx.lineWidth = Math.max(0.8, S*0.0022);
   for (const c of circles){
     otx.beginPath();
-    otx.arc(c.x + orbitPanX, c.y + orbitPanY, c.r, 0, Math.PI*2);
+    otx.arc(c.x, c.y, c.r, 0, Math.PI*2);
     otx.stroke();
   }
   
@@ -2484,7 +2848,7 @@ function drawOrbit(){
     otx.strokeStyle = 'rgba(35,32,26,0.6)';
     otx.lineWidth = Math.max(0.8, S*0.002);
     otx.beginPath();
-    otx.arc(dot.x + orbitPanX, dot.y + orbitPanY, dotR, 0, Math.PI*2);
+    otx.arc(dot.x, dot.y, dotR, 0, Math.PI*2);
     otx.fill();
     otx.stroke();
   }
