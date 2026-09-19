@@ -606,7 +606,18 @@ let solveToken = 0;
 function inputLocked(){ return solving || solverBusy; }
 function busy(){ return active || layerDrag || queue.length > 0; }
 
-function enqueueMove(m){ queue.push(m); }
+function enqueueMove(m){
+  // A 180° turn is two visible quarter turns in the reference. Expanding it
+  // keeps every sticker on the same polar rule instead of asking one shortcut
+  // interpolation to guess a half-turn path.
+  if (m.turns === 2 && !m._quarterPart){
+    const historyEntry = { ...m };
+    queue.push({ ...m, turns:1, record:false, count:false, _quarterPart:true });
+    queue.push({ ...m, turns:1, record:!!m.record, count:true, historyEntry, _quarterPart:true });
+    return;
+  }
+  queue.push(m);
+}
 
 const _axisV = new THREE.Vector3();
 const _tmpV = new THREE.Vector3();
@@ -654,10 +665,10 @@ function finishMove(){
   settleCubies(cubies, finished.angle);
   cubeGroup.remove(pivot);
   active = null;
-  if (!finished.isCancelledDrag){
+  if (!finished.isCancelledDrag && move.count !== false){
     moveCount++;
     movesEl.textContent = moveCount;
-    if (move.record) history.push(move);
+    if (move.record) history.push(move.historyEntry || move);
   }
   afterMove();
 }
@@ -832,7 +843,7 @@ function doScramble(n=25){
     last = fi;
     const r = Math.random();
     const token = faces[fi] + (r < 0.33 ? "'" : r < 0.5 ? '2' : '');
-    queue.push({ ...parseMove(token), duration:210, record:true });
+    enqueueMove({ ...parseMove(token), duration:210, record:true });
   }
   showStatus('Scrambling…');
 }
@@ -842,7 +853,7 @@ function doUndo(){
   const m = history.pop();
   if (!m){ showStatus('Nothing to undo.'); return; }
   hideWin();
-  queue.push({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:420, record:false });
+  enqueueMove({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:420, record:false });
   noteActivity();
 }
 
@@ -930,7 +941,7 @@ async function doSolve(){
   showStatus('Solution · ' + tokens.length + ' moves: ' + sol, true);
   solving = true;
   restartTimer();
-  for (const t of tokens) queue.push({ ...parseMove(t), duration:460, record:false });
+  for (const t of tokens) enqueueMove({ ...parseMove(t), duration:460, record:false });
 }
 
 /* --------------------------------- UI -------------------------------------- */
@@ -949,7 +960,7 @@ for (const row of [['R','L','U','D','F','B'], ["R'","L'","U'","D'","F'","B'"]]){
     b.addEventListener('click', () => {
       if (inputLocked() || busy()) return;
       hideWin();
-      queue.push({ ...parseMove(t), duration:500, record:true });
+      enqueueMove({ ...parseMove(t), duration:500, record:true });
       noteActivity();
     });
     pad.appendChild(b);
@@ -1331,7 +1342,7 @@ window.__cube = {
     for (const t of notation.trim().split(/\s+/)){
       if (!t) continue;
       const m = { ...parseMove(t), record:true };
-      if (instant) applyInstant(m); else queue.push({ ...m, duration:500 });
+      if (instant) applyInstant(m); else enqueueMove({ ...m, duration:500 });
     }
     moveCount += 0;
   },
