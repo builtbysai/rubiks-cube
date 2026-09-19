@@ -1089,6 +1089,24 @@
     .actionDock{grid-template-columns:repeat(5,64px);}
     .dockAction{min-height:42px;}
   }
+
+  /* Orbit optical spacing refinement */
+  #orbitPanel{
+    width:clamp(132px,14.5vw,184px);
+    padding:8px;
+  }
+  @media (max-width:760px){
+    #orbitPanel{
+      width:112px;
+      padding:6px;
+    }
+  }
+  @media (max-width:390px){
+    #orbitPanel{
+      width:102px;
+      padding:5px;
+    }
+  }
 </style>
 <script type="importmap">
 {
@@ -1213,16 +1231,16 @@
 
     <button id="btnUndo" class="dockAction" type="button" aria-label="Undo last move">
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M9 8H5V4"/>
-        <path d="M5.4 8A8 8 0 1 1 6.8 17"/>
+        <path d="m9 14-5-5 5-5"/>
+        <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>
       </svg>
       <span>Undo</span>
     </button>
 
     <button id="btnReset" class="dockAction" type="button" aria-label="Reset cube">
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6.2 7.2A8 8 0 1 1 5 15.5"/>
-        <path d="M6 3.8v4.4h4.4"/>
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+        <path d="M3 3v5h5"/>
       </svg>
       <span>Reset</span>
     </button>
@@ -2637,21 +2655,22 @@ function circleIntersections(x1, y1, r1, x2, y2, r2){
 // Build the 54 slots: intersections of rings from different centers.
 // Returns { slots: [{x, y, pair, side}], circles: [{x, y, r}] }
 function buildOrbitSlots(S){
-  // Three centers at equilateral triangle vertices
-  // Scaled to fit S x S panel with margin
-  const cx = S/2, cy = S/2;
-  // Equilateral triangle centers
-  // d decreased and r/d increased per Hans: inner clusters (yellow/green/orange)
-  // need wider pairwise intersection zones, central triple-zone empty
-  // Measured from the reference video. With S=320 the source is approximately:
-  // center spacing 79.2px, radii 64.0 / 82.3 / 100.6px.
-  const d = S * 0.2476;
+  // Keep the reference proportions, but draw them inside an inset square.
+  // The old minimap used nearly the whole canvas and the dots crowded the
+  // outer rings at small sizes. 84% leaves a deliberate ~8% canvas gutter
+  // before the geometry's own natural margin.
+  const drawS = S * 0.84;
+  const offset = (S - drawS) / 2;
+  const cx = offset + drawS/2, cy = offset + drawS/2;
+
+  // Reference geometry measured from the supplied video.
+  const d = drawS * 0.2476;
   const h = d * Math.sqrt(3)/2;
   const T = [cx, cy - h*2/3];
   const L = [cx - d/2, cy + h/3];
   const R = [cx + d/2, cy + h/3];
 
-  const radii = [S*0.2000, S*0.2572, S*0.3143];
+  const radii = [drawS*0.2000, drawS*0.2572, drawS*0.3143];
   
   const centers = {T, L, R};
   const circles = [];
@@ -2682,7 +2701,7 @@ function buildOrbitSlots(S){
       }
     }
   }
-  return {slots, circles, centers};
+  return {slots, circles, centers, radii, drawS};
 }
 
 let orbitCache = null;
@@ -2690,8 +2709,8 @@ let orbitSlotMap = null;
 function getOrbitGeometry(){
   const S = orbitSize();
   if (!orbitCache || Math.abs(orbitCache.S - S) > 1){
-    const {slots, circles, centers} = buildOrbitSlots(S);
-    orbitCache = {S, slots, circles, centers, radii:[S*0.2000, S*0.2572, S*0.3143]};
+    const {slots, circles, centers, radii, drawS} = buildOrbitSlots(S);
+    orbitCache = {S, slots, circles, centers, radii, drawS};
   }
   return orbitCache;
 }
@@ -2757,12 +2776,12 @@ let orbitDots = null;  // Array of {home, x, y, tx, ty}
 function drawOrbit(){
   if (!orbitOn) return;
   const S = orbitSize();
-  const {slots, circles} = getOrbitGeometry();
+  const {slots, circles, drawS} = getOrbitGeometry();
   otx.clearRect(0, 0, S, S);
   
   // Draw the 9 circles (with pan offset)
   otx.strokeStyle = 'rgba(70,70,70,0.42)';
-  otx.lineWidth = Math.max(0.8, S*0.0022);
+  otx.lineWidth = Math.max(0.65, drawS*0.00215);
   for (const c of circles){
     otx.beginPath();
     otx.arc(c.x, c.y, c.r, 0, Math.PI*2);
@@ -2770,7 +2789,7 @@ function drawOrbit(){
   }
   
   // Sliding dots: 54 dots with fixed colors move between slots
-  const dotR = Math.max(3.5, S*0.0205);
+  const dotR = Math.max(1.9, drawS*0.0185);
   const slotMap = getOrbitSlotMap();
   
   // Initialize dots in solved positions (first run)
@@ -2847,7 +2866,7 @@ function drawOrbit(){
     if (!motion){ dot.x = dot.tx; dot.y = dot.ty; }
     otx.fillStyle = ORBIT_CSS[dot.home] || '#888';
     otx.strokeStyle = 'rgba(35,32,26,0.6)';
-    otx.lineWidth = Math.max(0.8, S*0.002);
+    otx.lineWidth = Math.max(0.65, drawS*0.0019);
     otx.beginPath();
     otx.arc(dot.x, dot.y, dotR, 0, Math.PI*2);
     otx.fill();
