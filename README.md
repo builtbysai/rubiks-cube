@@ -47,10 +47,12 @@ The orbit view is not a second cube state. It is a projection of those same
 54 physical sticker identities. Its static geometry and turn timing were
 measured against the supplied reference video. The three circle families stay
 fixed as the coordinate frame while sticker points move through them. Face
-turns move the affected 20 stickers. Whole-cube face-to-face rotations remap
-the complete projection, moving 52 sticker positions while the two stickers on
-the rotation axis remain fixed. Both the 3D transform and 2D projection read
-the same live angle, including partial drags and snap completion.
+turns move the affected 20 stickers. Whole-cube face-to-face rotations behave like three simultaneous slice turns:
+36 points remain locked to the inner, middle, and outer circles of the active
+axis (12 on each ring), 16 axis-facing perimeter points move radially between
+rings, and the two face-center points remain fixed. Both the 3D transform and
+2D projection read the same live angle, including partial drags and snap
+completion.
 
 ## Model check
 
@@ -61,7 +63,8 @@ node tests/orbit-reference-model.test.mjs
 ```
 
 It verifies all 54 projected nodes, all six quarter-turn generators, exactly
-20 moving sticker positions per face turn, and four-turn round trips.
+20 moving sticker positions per face turn, the 36-track/16-radial whole-view
+split, all 24 face-to-face orientations, and four-turn round trips.
 
 ## Run it locally
 
