@@ -48,6 +48,17 @@ X the lower-left family, and Z the lower-right family. A cosine-eased move
 timeline drives both renderers together, so there is no post-turn catch-up or
 nearest-color reassignment.
 
+## Model check
+
+The reference projection has a small dependency-free invariant test:
+
+```bash
+node tests/orbit-reference-model.test.mjs
+```
+
+It verifies all 54 projected nodes, all six quarter-turn generators, exactly
+20 moving sticker positions per face turn, and four-turn round trips.
+
 ## Run it locally
 
 No build step. Serve the folder over HTTP (ES modules block `file://`):
