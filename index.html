@@ -385,9 +385,11 @@ buildCube();
 
 /* ------------------------------ view controls ------------------------------ */
 
-let yaw = -1.5, pitch = 0.75;          // intro start
+// Fixed isometric presentation. All user-visible orientation changes go
+// through viewOrientationQ so the 3D cube and 2D orbit can never disagree.
+let yaw = -0.62, pitch = 0.46;
 let targetYaw = -0.62, targetPitch = 0.46;
-let zoomFactor = 1.35, targetZoomFactor = 1.0;   // intro dolly-in
+let zoomFactor = 1.0, targetZoomFactor = 1.0;
 
 // Whole-cube viewing orientation. The reference does not leave the 2D
 // projection frozen while the 3D cube turns: all 54 stickers transition to
