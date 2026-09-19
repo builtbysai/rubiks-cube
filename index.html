@@ -959,16 +959,13 @@ function getOrbitSlotMap(){
   return orbitSlotMap;
 }
 
-// Smooth color transitions for orbit dots
-// Each slot tracks its current displayed RGB, lerping toward the target
-let orbitDotColors = null;  // Array of [r,g,b] per slotMap index
+// Sliding dots for orbit diagram (Hans: "they should slide in the orbit not just fade")
+// 54 dots, each with fixed home color, current (x,y), and target (tx,ty).
+// Dots move between slots along the circles when the cube turns.
+let orbitDots = null;  // Array of {home, x, y, tx, ty}
 // Pan/drag the orbit diagram (Hans: "slowly drag or move it")
 let orbitPanX = 0, orbitPanY = 0;
 let orbitDragging = false, orbitDragSX = 0, orbitDragSY = 0, orbitPanSX = 0, orbitPanSY = 0;
-function hexToRgb(hex){
-  const h = hex.replace('#','');
-  return [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16)];
-}
 function drawOrbit(){
   if (!orbitOn) return;
   const S = orbitSize();
@@ -988,37 +985,78 @@ function drawOrbit(){
   let state = null;
   try { state = facelets(); } catch(e) { state = null; }
   
-  // Draw the 54 dots at intersections, colored by current cube state
-  // with smooth fade transitions instead of snapping
+  // Sliding dots: 54 dots with fixed colors move between slots
   const dotR = Math.max(4, S*0.022);
   const slotMap = getOrbitSlotMap();
-  if (!orbitDotColors || orbitDotColors.length !== slotMap.length){
-    orbitDotColors = slotMap.map(() => [255,255,255]);
+  
+  // Initialize dots in solved positions (first run)
+  if (!orbitDots || orbitDots.length !== 54){
+    orbitDots = [];
+    // Group slots by face (solved color)
+    const byFace = {U:[], D:[], F:[], B:[], R:[], L:[]};
+    for (const {slot, globalIdx} of slotMap){
+      const face = solvedColorForSlot(slot, S);
+      byFace[face].push(slot);
+    }
+    // Create 9 dots per face, positioned at the face's slots
+    for (const face of ['U','D','F','B','R','L']){
+      for (const slot of byFace[face]){
+        orbitDots.push({home: face, x: slot.x, y: slot.y, tx: slot.x, ty: slot.y});
+      }
+    }
   }
-  const lerpSpeed = 0.18;  // fade speed (0-1, higher = faster)
-  for (let i=0; i<slotMap.length; i++){
-    const {slot, globalIdx} = slotMap[i];
-    let face = 'U';
-    if (state && globalIdx < state.length){
-      face = state[globalIdx];
-    } else {
-      face = solvedColorForSlot(slot, S);
+  
+  // Update targets: for each slot, find which home color is currently there,
+  // then assign dots of that color to those slots (nearest matching)
+  if (state && state.length >= 54){
+    // Build list of slots per current color
+    const slotsByColor = {U:[], D:[], F:[], B:[], R:[], L:[]};
+    for (const {slot, globalIdx} of slotMap){
+      const home = state[globalIdx] || 'U';
+      if (slotsByColor[home]) slotsByColor[home].push(slot);
     }
-    const target = hexToRgb(ORBIT_CSS[face] || '#888888');
-    const cur = orbitDotColors[i];
-    // Lerp toward target
-    cur[0] += (target[0] - cur[0]) * lerpSpeed;
-    cur[1] += (target[1] - cur[1]) * lerpSpeed;
-    cur[2] += (target[2] - cur[2]) * lerpSpeed;
-    // Snap when close enough
-    if (Math.abs(target[0]-cur[0])<1 && Math.abs(target[1]-cur[1])<1 && Math.abs(target[2]-cur[2])<1){
-      cur[0]=target[0]; cur[1]=target[1]; cur[2]=target[2];
+    // For each color, match dots to slots greedily by nearest distance
+    const dotsByColor = {U:[], D:[], F:[], B:[], R:[], L:[]};
+    for (const dot of orbitDots){
+      if (dotsByColor[dot.home]) dotsByColor[dot.home].push(dot);
     }
-    otx.fillStyle = `rgb(${Math.round(cur[0])},${Math.round(cur[1])},${Math.round(cur[2])})`;
+    for (const color of ['U','D','F','B','R','L']){
+      const dots = dotsByColor[color];
+      const slots = slotsByColor[color];
+      if (dots.length !== slots.length) continue;  // safety
+      // Greedy nearest matching
+      const used = new Set();
+      for (const dot of dots){
+        let bestIdx = -1, bestDist = Infinity;
+        for (let i=0; i<slots.length; i++){
+          if (used.has(i)) continue;
+          const dx = slots[i].x - dot.tx, dy = slots[i].y - dot.ty;
+          const d = dx*dx + dy*dy;
+          if (d < bestDist){ bestDist = d; bestIdx = i; }
+        }
+        if (bestIdx >= 0){
+          used.add(bestIdx);
+          dot.tx = slots[bestIdx].x;
+          dot.ty = slots[bestIdx].y;
+        }
+      }
+    }
+  }
+  
+  // Animate dots toward targets (slide along orbits)
+  const slideSpeed = 0.22;  // higher = faster
+  for (const dot of orbitDots){
+    dot.x += (dot.tx - dot.x) * slideSpeed;
+    dot.y += (dot.ty - dot.y) * slideSpeed;
+    // Snap when close
+    if (Math.abs(dot.tx - dot.x) < 0.5) dot.x = dot.tx;
+    if (Math.abs(dot.ty - dot.y) < 0.5) dot.y = dot.ty;
+    
+    otx.fillStyle = ORBIT_CSS[dot.home] || '#888';
     otx.strokeStyle = 'rgba(35,32,26,0.6)';
     otx.lineWidth = Math.max(0.8, S*0.002);
     otx.beginPath();
-    otx.arc(slot.x + orbitPanX, slot.y + orbitPanY, dotR, 0, Math.PI*2);
+    otx.arc(dot.x + orbitPanX, dot.y + orbitPanY, dotR, 0, Math.PI*2);
     otx.fill();
     otx.stroke();
   }
@@ -1031,7 +1069,7 @@ btnOrbit.addEventListener('click', () => {
   btnOrbit.setAttribute('aria-pressed', String(orbitOn));
   orbitPanel.classList.toggle('hidden', !orbitOn);
   if (orbitOn){
-    orbitCache = null; orbitSlotMap = null; orbitDotColors = null;
+    orbitCache = null; orbitSlotMap = null; orbitDots = null;
     sizeOrbitCanvas();
   }
 });
