@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Rubik's Cube · Interactive 3D</title>
+<style>
+  :root{
+    --paper:#f6f1e7;
+    --paper2:#efe8d8;
+    --ink:#23201a;
+    --ink-soft:#6b6455;
+    --accent:#b71234;
+    --card:#fffdf8;
+    --line:#e2d9c4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:linear-gradient(180deg,var(--paper) 0%,var(--paper2) 100%);
+    display:grid;
+    grid-template-rows:auto minmax(0,1fr) auto;
+    height:100dvh;
+    overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 18px 8px;
+    max-width:900px; width:100%; margin:0 auto;
+  }
+  .title h1{margin:0; font-size:22px; letter-spacing:.5px;}
+  .title p{margin:2px 0 0; font-size:12px; color:var(--ink-soft);}
+  .stats{display:flex; gap:18px; text-align:right;}
+  .stat .v{font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .stat .k{font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--ink-soft);}
+  #stage{position:relative; min-height:0;}
+  #c{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; cursor:grab;}
+  #c:active{cursor:grabbing;}
+  #status{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    max-width:min(92%,640px);
+    background:rgba(35,32,26,.85); color:#f6f1e7;
+    font-size:12.5px; line-height:1.45;
+    padding:8px 14px; border-radius:999px;
+    opacity:0; transition:opacity .25s; pointer-events:none;
+    text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #status.show{opacity:1;}
+  #win{
+    position:absolute; inset:0; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(246,241,231,.55); backdrop-filter:blur(3px);
+    z-index:5;
+  }
+  #win.show{display:flex;}
+  #win .card{
+    background:var(--card); border:1px solid var(--line); border-radius:18px;
+    padding:28px 36px; text-align:center; box-shadow:0 18px 50px rgba(35,32,26,.18);
+  }
+  #win .card h2{margin:0 0 6px; font-size:28px;}
+  #win .card p{margin:4px 0 16px; color:var(--ink-soft); font-size:14px;}
+  footer{
+    max-width:900px; width:100%; margin:0 auto; padding:6px 18px 14px;
+  }
+  .btnrow{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;}
+  button{
+    font:inherit; color:var(--ink);
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer;
+    box-shadow:0 2px 6px rgba(35,32,26,.08);
+    transition:transform .06s, box-shadow .15s, background .15s;
+  }
+  button:hover{background:#fff; box-shadow:0 4px 12px rgba(35,32,26,.12);}
+  button:active{transform:scale(.96);}
+  button.primary{background:var(--ink); color:#f6f1e7; border-color:var(--ink);}
+  button.primary:hover{background:#3a352a;}
+  button:disabled{opacity:.45; cursor:default; transform:none;}
+  #movepad{display:grid; grid-template-columns:repeat(6,1fr); gap:6px; max-width:520px; margin:0 auto 8px;}
+  #movepad button{padding:8px 0; font-size:13px; border-radius:9px;}
+  .hint{text-align:center; font-size:11.5px; color:var(--ink-soft); line-height:1.5; padding:0 8px;}
+  kbd{background:#e9e2d2; border:1px solid #d6cbae; border-radius:4px; padding:0 5px; font-size:11px; font-family:inherit;}
+  @media (max-width:560px){
+    .title h1{font-size:18px;}
+    .title p{font-size:11px;}
+    .stat .v{font-size:16px;}
+    button{padding:9px 14px; font-size:13px;}
+  }
+  /* Compact mode for short viewports (landscape phones): shrink chrome, hide the
+     hint, and give the stage as much height as possible. */
+  @media (max-height: 540px){
+    #app{ padding:8px 14px; gap:6px; }
+    header h1{ font-size:19px; }
+    header p{ display:none; }
+    .stats{ font-size:16px; gap:16px; }
+    .stats small{ font-size:9px; }
+    #toolbar{ gap:6px; margin-top:2px; }
+    #toolbar button{ padding:6px 10px; font-size:13px; border-radius:10px; }
+    #movepad{ gap:4px; margin-top:6px; max-width:520px; }
+    #movepad button{ padding:5px 0; font-size:12px; border-radius:8px; }
+    .hint{ display:none; }
+    footer{ gap:0; }
+    #status{ font-size:12px; padding:6px 12px; top:8px; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <h1>Rubik's Cube</h1>
+    <p>Interactive 3D &middot; Kociemba two-phase solver inside</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="time">0:00</div><div class="k">Time</div></div>
+    <div class="stat"><div class="v" id="moves">0</div><div class="k">Moves</div></div>
+  </div>
+</header>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="status"></div>
+  <div id="win">
+    <div class="card">
+      <h2>Solved</h2>
+      <p id="winDetail"></p>
+      <button class="primary" id="winScramble">New scramble</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="btnrow">
+    <button id="btnScramble" class="primary">Scramble</button>
+    <button id="btnSolve">Solve</button>
+    <button id="btnUndo">Undo</button>
+    <button id="btnReset">Reset</button>
+  </div>
+  <div id="movepad"></div>
+  <div class="hint">
+    Drag a sticker to turn that layer &middot; drag the background to orbit &middot; scroll or pinch to zoom<br>
+    Keys <kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd> turn faces, hold <kbd>Shift</kbd> for counter-clockwise
+  </div>
+</footer>
+
+<script src="vendor/cube.js"></script>
+<script src="vendor/solve.js"></script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ---------------------------------- model ---------------------------------- */
+
+const FACE_COLORS = { U:0xffffff, D:0xffd500, F:0x009b48, B:0x0046ad, R:0xb71234, L:0xff5800 };
+
+// Face order for the solver string is URFDLB. Each entry: outward normal n,
+// screen-up u and screen-right r when looking straight at the face.
+const FACES = [
+  { id:'U', n:[ 0, 1, 0], u:[ 0, 0,-1], r:[ 1, 0, 0] },
+  { id:'R', n:[ 1, 0, 0], u:[ 0, 1, 0], r:[ 0, 0,-1] },
+  { id:'F', n:[ 0, 0, 1], u:[ 0, 1, 0], r:[ 1, 0, 0] },
+  { id:'D', n:[ 0,-1, 0], u:[ 0, 0, 1], r:[ 1, 0, 0] },
+  { id:'L', n:[-1, 0, 0], u:[ 0, 1, 0], r:[ 0, 0, 1] },
+  { id:'B', n:[ 0, 0,-1], u:[ 0, 1, 0], r:[-1, 0, 0] },
+];
+
+// Standard Singmaster notation mapped to {axis, layer, dir}.
+// dir is the sign of a quarter turn about the positive axis; a prime flips it.
+const MOVES = {
+  R:{axis:'x', layer: 1, dir:-1}, L:{axis:'x', layer:-1, dir: 1},
+  U:{axis:'y', layer: 1, dir:-1}, D:{axis:'y', layer:-1, dir: 1},
+  F:{axis:'z', layer: 1, dir:-1}, B:{axis:'z', layer:-1, dir: 1},
+};
+
+function parseMove(token){
+  const base = MOVES[token[0]];
+  let dir = base.dir, turns = 1;
+  if (token.includes("'")) dir = -dir;
+  if (token.includes('2')) turns = 2;
+  return { axis:base.axis, layer:base.layer, dir, turns };
+}
+
+/* ---------------------------------- scene ---------------------------------- */
+
+const canvas = document.getElementById('c');
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cfc0, 0.95));
+const key = new THREE.DirectionalLight(0xffffff, 2.0);
+key.position.set(4.5, 8, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -5; key.shadow.camera.right = 5;
+key.shadow.camera.top = 5; key.shadow.camera.bottom = -5;
+key.shadow.radius = 4;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xfff2dd, 0.5);
+rim.position.set(-6, 3, -5);
+scene.add(rim);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(30, 30),
+  new THREE.ShadowMaterial({ opacity: 0.16 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -2.85;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const viewGroup = new THREE.Group();   // user orbits this
+const cubeGroup = new THREE.Group();   // cubies live here, axis aligned
+viewGroup.add(cubeGroup);
+scene.add(viewGroup);
+
+const bodyGeo = new RoundedBoxGeometry(0.96, 0.96, 0.96, 4, 0.07);
+const bodyMat = new THREE.MeshStandardMaterial({ color:0x17171b, roughness:0.35, metalness:0.15 });
+const stickerGeo = new THREE.PlaneGeometry(0.82, 0.82);
+
+function buildCube(){
+  while (cubeGroup.children.length) {
+    const c = cubeGroup.children.pop();
+    c.traverse(o => { if (o.isMesh && o.material !== bodyMat) o.material.dispose(); });
+  }
+  for (let x=-1; x<=1; x++) for (let y=-1; y<=1; y++) for (let z=-1; z<=1; z++){
+    const cubie = new THREE.Group();
+    cubie.position.set(x, y, z);
+    cubie.userData.pos = new THREE.Vector3(x, y, z);
+    cubie.userData.stickers = [];
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.castShadow = true;
+    cubie.add(body);
+    for (const f of FACES){
+      const n = f.n;
+      const px = x*n[0], py = y*n[1], pz = z*n[2];
+      if (px + py + pz !== 1) continue;   // sticker only where this cubie touches face f
+      const m = new THREE.Mesh(
+        stickerGeo,
+        new THREE.MeshStandardMaterial({ color:FACE_COLORS[f.id], roughness:0.28, metalness:0.05 })
+      );
+      m.position.set(n[0]*0.485, n[1]*0.485, n[2]*0.485);
+      m.lookAt(n[0]*2, n[1]*2, n[2]*2);
+      m.userData.dir = new THREE.Vector3(n[0], n[1], n[2]); // home direction (cube space)
+      m.userData.home = f.id;
+      cubie.add(m);
+      cubie.userData.stickers.push(m);
+    }
+    cubeGroup.add(cubie);
+  }
+}
+buildCube();
+
+/* ------------------------------ view controls ------------------------------ */
+
+let yaw = -1.5, pitch = 0.75;          // intro start
+let targetYaw = -0.62, targetPitch = 0.46;
+let zoomFactor = 1.35, targetZoomFactor = 1.0;   // intro dolly-in
+
+const pointers = new Map();
+let downInfo = null;   // {sx, sy, orbit} or {sx, sy, cubie, normal, decided}
+let pinch = null;
+
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const _q = new THREE.Quaternion();
+
+function cubeLocalNormal(worldNormal){
+  cubeGroup.getWorldQuaternion(_q).invert();
+  const n = worldNormal.clone().applyQuaternion(_q);
+  const ax = Math.abs(n.x) > 0.5 ? 'x' : Math.abs(n.y) > 0.5 ? 'y' : 'z';
+  const v = new THREE.Vector3();
+  v[ax] = Math.sign(n[ax]);
+  return v;
+}
+
+function pick(e){
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left)/r.width)*2 - 1, -((e.clientY - r.top)/r.height)*2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(cubeGroup.children, true);
+  for (const h of hits){
+    if (!h.object.userData.home) continue;   // stickers only; body gaps mean orbit
+    let o = h.object;
+    while (o && !o.userData.pos) o = o.parent;
+    if (!o) continue;
+    const wn = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+    return { cubie:o, normal:cubeLocalNormal(wn) };
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if (pointers.size === 2){
+    const [a, b] = [...pointers.values()];
+    pinch = { d:Math.hypot(a.x-b.x, a.y-b.y), zoomFactor:targetZoomFactor };
+    downInfo = null;
+    return;
+  }
+  if (pointers.size > 2) return;
+  const hit = pick(e);
+  if (hit && !inputLocked()) downInfo = { sx:e.clientX, sy:e.clientY, ...hit, decided:false };
+  else downInfo = { sx:e.clientX, sy:e.clientY, orbit:true };
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const dxAll = e.clientX - prev.x, dyAll = e.clientY - prev.y;
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+  if (pinch && pointers.size >= 2){
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x-b.x, a.y-b.y);
+    if (d > 10) targetZoomFactor = Math.min(2.5, Math.max(0.5, pinch.zoomFactor * pinch.d / d));
+    return;
+  }
+  if (!downInfo) return;
+  const dx = e.clientX - downInfo.sx, dy = e.clientY - downInfo.sy;
+
+  if (downInfo.orbit){
+    targetYaw += dxAll * 0.0085;
+    targetPitch = Math.min(1.25, Math.max(-1.25, targetPitch + dyAll * 0.0085));
+    downInfo.sx = e.clientX; downInfo.sy = e.clientY;
+    return;
+  }
+  if (downInfo.decided || Math.hypot(dx, dy) < 10) return;
+  decideTurn(dx, dy);
+  downInfo.decided = true;
+});
+
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (pointers.size === 0) downInfo = null;
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  targetZoomFactor = Math.min(2.5, Math.max(0.5, targetZoomFactor * (1 + e.deltaY*0.001)));
+}, { passive:false });
+
+// Decide which layer turn a drag means: the in-plane axis most aligned with
+// the drag, then the rotation that carries the grabbed point along the drag.
+function decideTurn(dx, dy){
+  const n = downInfo.normal;
+  const center = downInfo.cubie.getWorldPosition(new THREE.Vector3());
+  cubeGroup.getWorldQuaternion(_q);
+  let best = null;
+  for (const a of ['x','y','z']){
+    if (Math.abs(n[a]) > 0.5) continue;
+    const v = new THREE.Vector3(); v[a] = 1;
+    const vw = v.clone().applyQuaternion(_q);
+    const p0 = center.clone().project(camera);
+    const p1 = center.clone().add(vw).project(camera);
+    const sx = p1.x - p0.x, sy = -(p1.y - p0.y);
+    const len = Math.hypot(sx, sy);
+    if (len < 1e-6) continue;
+    const dot = (dx*sx + dy*sy) / (Math.hypot(dx, dy) * len);
+    if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { axis:a, dot };
+  }
+  if (!best) return;
+  const vv = new THREE.Vector3(); vv[best.axis] = Math.sign(best.dot);
+  const omega = new THREE.Vector3().crossVectors(n, vv); // n x t: grabbed point moves along t
+  const axis = Math.abs(omega.x) > 0.5 ? 'x' : Math.abs(omega.y) > 0.5 ? 'y' : 'z';
+  enqueueMove({
+    axis, layer:Math.round(downInfo.cubie.userData.pos[axis]),
+    dir:Math.sign(omega[axis]), turns:1, duration:190, record:true,
+  });
+  noteActivity();
+}
+
+/* ------------------------------- move engine ------------------------------- */
+
+const queue = [];
+let active = null;      // {pivot, cubies, axis, angle, t, dur, move}
+const history = [];
+let solving = false;    // solver playback in progress
+let solverBusy = false; // solver thinking (worker)
+let suppressWin = false;
+let solveToken = 0;
+
+function inputLocked(){ return solving || solverBusy; }
+function busy(){ return active || queue.length > 0; }
+
+function enqueueMove(m){ queue.push(m); }
+
+const _axisV = new THREE.Vector3();
+const _tmpV = new THREE.Vector3();
+
+function startMove(m){
+  const pivot = new THREE.Group();   // identity transform inside cubeGroup
+  cubeGroup.add(pivot);
+  const cubies = [];
+  for (const c of cubeGroup.children){
+    if (c === pivot || !c.userData.pos) continue;
+    if (Math.round(c.userData.pos[m.axis]) === m.layer) cubies.push(c);
+  }
+  for (const c of cubies) pivot.add(c);
+  active = { pivot, cubies, axis:m.axis, angle:m.dir*m.turns*Math.PI/2, t:0, dur:(m.duration || 190)/1000, move:m };
+}
+
+function settleCubies(cubies, angle){
+  _axisV.set(0,0,0);
+  _axisV[active ? active.axis : 'x'] = 1;
+  const q = new THREE.Quaternion().setFromAxisAngle(_axisV, angle);
+  for (const c of cubies){
+    _tmpV.copy(c.userData.pos).applyQuaternion(q);
+    _tmpV.set(Math.round(_tmpV.x), Math.round(_tmpV.y), Math.round(_tmpV.z));
+    c.userData.pos.copy(_tmpV);
+    c.position.copy(_tmpV);
+    c.quaternion.premultiply(q);
+    cubeGroup.add(c);
+  }
+}
+
+function finishMove(){
+  const { pivot, cubies, move } = active;
+  settleCubies(cubies, active.angle);
+  cubeGroup.remove(pivot);
+  active = null;
+  moveCount++;
+  movesEl.textContent = moveCount;
+  if (move.record) history.push(move);
+  afterMove();
+}
+
+// Instant (unanimated) turn, used by tests.
+function applyInstant(m){
+  const cubies = [];
+  for (const c of cubeGroup.children){
+    if (!c.userData.pos) continue;
+    if (Math.round(c.userData.pos[m.axis]) === m.layer) cubies.push(c);
+  }
+  const keep = active; active = { axis:m.axis };
+  settleCubies(cubies, m.dir*m.turns*Math.PI/2);
+  active = keep;
+  if (m.record) history.push(m);
+}
+
+function afterMove(){
+  if (suppressWin){
+    if (!busy()) suppressWin = false;   // scramble drained
+    return;
+  }
+  if (!busy() && isSolved()){
+    stopTimer();
+    if (solving){
+      solving = false;
+      showWin('The solver found the way home.');
+    } else {
+      showWin();
+    }
+  }
+}
+
+const easeInOut = k => k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3)/2;
+
+/* ------------------------------ cube state --------------------------------- */
+
+const _n = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _d = new THREE.Vector3();
+
+const _lq = new THREE.Quaternion();
+// Every cubie with its logical (settled) position/orientation. While a turn is
+// animating, the in-flight layer gets its pending rotation applied, so state
+// readers (facelets, isSolved) stay correct mid-animation instead of crashing.
+function logicalCubies(){
+  const out = [];
+  let sq = null;
+  if (active){
+    _axisV.set(0,0,0); _axisV[active.axis] = 1;
+    sq = new THREE.Quaternion().setFromAxisAngle(_axisV, active.angle);
+  }
+  for (const c of cubeGroup.children){
+    if (!c.userData.pos) continue;
+    out.push({ c, pos:c.userData.pos, quat:c.quaternion });
+  }
+  if (active) for (const c of active.cubies){
+    _tmpV.copy(c.userData.pos).applyQuaternion(sq);
+    _tmpV.set(Math.round(_tmpV.x), Math.round(_tmpV.y), Math.round(_tmpV.z));
+    _lq.copy(sq).multiply(c.quaternion);
+    out.push({ c, pos:_tmpV.clone(), quat:_lq.clone() });
+  }
+  return out;
+}
+
+function facelets(){
+  const cubies = logicalCubies();
+  let s = '';
+  for (const f of FACES){
+    _n.set(...f.n); _u.set(...f.u); _r.set(...f.r);
+    for (let row=0; row<3; row++) for (let col=0; col<3; col++){
+      let cubie = null;
+      for (const e of cubies){
+        const p = e.pos;
+        if (Math.round(p.dot(_n)) === 1 && Math.round(p.dot(_u)) === 1-row && Math.round(p.dot(_r)) === col-1){ cubie = e; break; }
+      }
+      let home = '?';
+      for (const st of cubie.c.userData.stickers){
+        _d.copy(st.userData.dir).applyQuaternion(cubie.quat);
+        if (_d.dot(_n) > 0.9){ home = st.userData.home; break; }
+      }
+      s += home;
+    }
+  }
+  return s;
+}
+
+function isSolved(){
+  const s = facelets();
+  for (let i=0; i<6; i++){
+    const block = s.slice(i*9, i*9+9);
+    if (!block.split('').every(ch => ch === block[0])) return false;
+  }
+  return true;
+}
+
+/* ------------------------------ actions ------------------------------------ */
+
+const timeEl = document.getElementById('time');
+const movesEl = document.getElementById('moves');
+const statusEl = document.getElementById('status');
+const winEl = document.getElementById('win');
+const winDetail = document.getElementById('winDetail');
+let moveCount = 0;
+let timerStart = 0, timerOn = false, timerId = 0;
+
+function showStatus(msg, sticky=false){
+  statusEl.textContent = msg;
+  statusEl.classList.add('show');
+  clearTimeout(showStatus._t);
+  if (!sticky) showStatus._t = setTimeout(() => statusEl.classList.remove('show'), 4200);
+}
+function hideStatus(){ statusEl.classList.remove('show'); }
+
+function fmtTime(ms){
+  const s = Math.floor(ms/1000);
+  return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+}
+function startTimer(){
+  if (timerOn || suppressWin || solving) return;
+  restartTimer();
+}
+function restartTimer(){
+  stopTimer();
+  timerOn = true; timerStart = Date.now();
+  timeEl.textContent = '0:00';
+  timerId = setInterval(() => timeEl.textContent = fmtTime(Date.now() - timerStart), 250);
+}
+function stopTimer(){ timerOn = false; clearInterval(timerId); }
+function resetTimer(){ stopTimer(); timerStart = 0; timeEl.textContent = '0:00'; }
+function noteActivity(){ startTimer(); }
+
+function showWin(sub){
+  const elapsed = timerStart ? fmtTime(Date.now()-timerStart) : '0:00';
+  winDetail.textContent = (sub || 'Nice work.') + ' ' + elapsed + ' · ' + moveCount + ' moves.';
+  winEl.classList.add('show');
+}
+function hideWin(){ winEl.classList.remove('show'); }
+
+function doScramble(n=25){
+  if (inputLocked() || busy()) return;
+  hideWin(); hideStatus();
+  history.length = 0; moveCount = 0; movesEl.textContent = '0';
+  resetTimer(); solving = false;
+  suppressWin = true;
+  const faces = ['R','L','U','D','F','B'];
+  let last = -1;
+  for (let i=0; i<n; i++){
+    let fi;
+    do { fi = Math.floor(Math.random()*6); } while (fi === last);
+    last = fi;
+    const r = Math.random();
+    const token = faces[fi] + (r < 0.33 ? "'" : r < 0.5 ? '2' : '');
+    queue.push({ ...parseMove(token), duration:105, record:true });
+  }
+  showStatus('Scrambling…');
+}
+
+function doUndo(){
+  if (inputLocked() || busy()) return;
+  const m = history.pop();
+  if (!m){ showStatus('Nothing to undo.'); return; }
+  hideWin();
+  queue.push({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:160, record:false });
+  noteActivity();
+}
+
+function doReset(){
+  solveToken++;
+  queue.length = 0;
+  active = null;   // buildCube discards the half-animated pivot with the cubies
+  solving = false; solverBusy = false; suppressWin = false;
+  buildCube();
+  history.length = 0; moveCount = 0; movesEl.textContent = '0';
+  resetTimer(); hideWin(); hideStatus();
+  showStatus('Back to a fresh cube.');
+}
+
+/* ------------------------------ solver ------------------------------------- */
+// Kociemba's two-phase algorithm (via the vendored cubejs library): a guided
+// search through the cube's state graph, usually about 20 moves. It runs in a
+// Web Worker so the one-time table build never freezes the page.
+
+let solverWorker = null, solverReady = false, solverWaiters = [];
+
+function getSolver(){
+  return new Promise(resolve => {
+    if (solverWorker && solverReady) return resolve(solverWorker);
+    solverWaiters.push(resolve);
+    if (solverWorker) return;
+    const base = window.__VENDOR_BASE || new URL('vendor/', document.baseURI).href;
+    const src =
+      "importScripts('" + base + "cube.js','" + base + "solve.js');\n" +
+      "Cube.initSolver();\n" +
+      "postMessage({type:'ready'});\n" +
+      "onmessage=function(e){\n" +
+      "  try{ postMessage({type:'solution', sol:Cube.fromString(e.data.facelets).solve()}); }\n" +
+      "  catch(err){ postMessage({type:'error', message:String(err)}); }\n" +
+      "};";
+    try {
+      solverWorker = new Worker(URL.createObjectURL(new Blob([src], { type:'text/javascript' })));
+    } catch(err){ solverWorker = null; }
+    if (!solverWorker){ finishWaiters(null); return; }
+    solverWorker.onmessage = e => {
+      if (e.data.type === 'ready'){ solverReady = true; finishWaiters(solverWorker); }
+      else if (solverWaiters._solve){ const cb = solverWaiters._solve; solverWaiters._solve = null; cb(e.data.sol || ''); }
+    };
+    solverWorker.onerror = () => {
+      if (!solverReady){ solverWorker = null; finishWaiters(null); }
+      else if (solverWaiters._solve){ const cb = solverWaiters._solve; solverWaiters._solve = null; cb(''); }
+    };
+    function finishWaiters(w){ const ws = solverWaiters; solverWaiters = []; ws.forEach(r => r(w)); }
+  });
+}
+
+function solveInWorker(faceletsStr){
+  return new Promise(async resolve => {
+    const w = await getSolver();
+    if (!w){ // worker unavailable: solve on the main thread
+      try {
+        if (typeof Cube !== 'undefined'){
+          Cube.initSolver();
+          resolve(Cube.fromString(faceletsStr).solve());
+          return;
+        }
+      } catch(e){}
+      resolve('');
+      return;
+    }
+    solverWaiters._solve = resolve;
+    setTimeout(() => { if (solverWaiters._solve){ const cb = solverWaiters._solve; solverWaiters._solve = null; cb(''); } }, 30000);
+    w.postMessage({ facelets:faceletsStr });
+  });
+}
+
+async function doSolve(){
+  if (inputLocked() || busy()) return;
+  const token = ++solveToken;
+  const s = facelets();
+  if (isSolved()){ showStatus('Already solved. Give it a scramble first.'); return; }
+  hideWin();
+  solverBusy = true;
+  showStatus(solverReady ? 'Solving…' : 'Warming up the solver (one-time setup, a few seconds)…', true);
+  const sol = await solveInWorker(s);
+  if (token !== solveToken) return;   // user hit reset meanwhile
+  solverBusy = false;
+  if (!sol || !sol.trim()){ showStatus('The solver came up empty. Try again.'); return; }
+  const tokens = sol.trim().split(/\s+/);
+  showStatus('Solution · ' + tokens.length + ' moves: ' + sol, true);
+  solving = true;
+  restartTimer();
+  for (const t of tokens) queue.push({ ...parseMove(t), duration:150, record:false });
+}
+
+/* --------------------------------- UI -------------------------------------- */
+
+document.getElementById('btnScramble').addEventListener('click', () => doScramble());
+document.getElementById('btnSolve').addEventListener('click', () => doSolve());
+document.getElementById('btnUndo').addEventListener('click', () => doUndo());
+document.getElementById('btnReset').addEventListener('click', () => doReset());
+document.getElementById('winScramble').addEventListener('click', () => doScramble());
+
+const pad = document.getElementById('movepad');
+for (const row of [['R','L','U','D','F','B'], ["R'","L'","U'","D'","F'","B'"]]){
+  for (const t of row){
+    const b = document.createElement('button');
+    b.textContent = t;
+    b.addEventListener('click', () => {
+      if (inputLocked() || busy()) return;
+      hideWin();
+      queue.push({ ...parseMove(t), duration:190, record:true });
+      noteActivity();
+    });
+    pad.appendChild(b);
+  }
+}
+
+window.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toUpperCase();
+  if (!MOVES[k] || inputLocked() || busy()) return;
+  hideWin();
+  const token = e.shiftKey ? k + "'" : k;
+  queue.push({ ...parseMove(token), duration:190, record:true });
+  noteActivity();
+});
+
+/* --------------------------------- loop ------------------------------------ */
+
+let lastT = performance.now();
+// Fit the whole cube in frame on any aspect ratio: widen the distance on
+// narrow portrait screens, keep the composed distance on desktop.
+function fitZoom(){
+  const a = stage.clientWidth / Math.max(1, stage.clientHeight);
+  return Math.min(22, 10.5 * Math.max(1, 1.26/a));
+}
+function resize(){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - lastT)/1000);
+  lastT = now;
+
+  yaw += (targetYaw - yaw) * 0.07;
+  pitch += (targetPitch - pitch) * 0.07;
+  zoomFactor += (targetZoomFactor - zoomFactor) * 0.1;
+  viewGroup.rotation.order = 'XYZ';   // yaw about world Y, then pitch: verticals stay vertical
+  viewGroup.rotation.y = yaw;
+  viewGroup.rotation.x = pitch;
+  camera.position.set(0, 0.7, fitZoom() * zoomFactor);
+  camera.lookAt(0, 0, 0);
+
+  if (active){
+    active.t += dt;
+    const k = Math.min(1, active.t / active.dur);
+    active.pivot.rotation[active.axis] = active.angle * easeInOut(k);
+    if (k >= 1) finishMove();
+  } else if (queue.length){
+    startMove(queue.shift());
+  }
+
+  renderer.render(scene, camera);
+}
+
+resize();
+showStatus('Drag a sticker to turn a layer.');
+requestAnimationFrame(loop);
+
+/* ------------------------------- debug API --------------------------------- */
+window.__cube = {
+  move(notation, instant=true){
+    for (const t of notation.trim().split(/\s+/)){
+      if (!t) continue;
+      const m = { ...parseMove(t), record:true };
+      if (instant) applyInstant(m); else queue.push({ ...m, duration:120 });
+    }
+    moveCount += 0;
+  },
+  facelets, isSolved,
+  scramble: n => doScramble(n),
+  reset: () => doReset(),
+  applySolution(sol){ for (const t of sol.trim().split(/\s+/)){ if (t) applyInstant({ ...parseMove(t), record:false }); } },
+  solveNow: async () => await solveInWorker(facelets()),
+  cubejsCheck: seq => new Cube().move(seq).asString(),
+  stickerScreenPos(faceId, row, col){
+    const f = FACES.find(f => f.id === faceId);
+    const n = new THREE.Vector3(...f.n), u = new THREE.Vector3(...f.u), r = new THREE.Vector3(...f.r);
+    for (const e of logicalCubies()){
+      const p = e.pos;
+      if (Math.round(p.dot(n)) === 1 && Math.round(p.dot(u)) === 1-row && Math.round(p.dot(r)) === col-1){
+        const st = e.c.userData.stickers.find(s => s.userData.home === faceId);
+        const v = new THREE.Vector3();
+        st.getWorldPosition(v).project(camera);
+        const rect = canvas.getBoundingClientRect();
+        return { x: rect.left + (v.x+1)/2*rect.width, y: rect.top + (1-v.y)/2*rect.height };
+      }
+    }
+    return null;
+  },
+  view: () => ({ yaw, pitch }),
+  state: () => ({ queue:queue.length, active:!!active, history:history.length }),
+  dbg: () => ({ queue:queue.length, active:!!active, t:active&&+active.t.toFixed(3),
+    dur:active&&active.dur, cubies:cubeGroup.children.filter(c=>c.userData.pos).length,
+    pivots:cubeGroup.children.filter(c=>!c.userData.pos).length }),
+};
+</script>
+</body>
+</html>
