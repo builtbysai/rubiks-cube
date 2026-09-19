@@ -106,29 +106,29 @@
   }
   /* Orbit diagram: floats over the stage, synced with the cube. */
   #orbitPanel{
-    position:absolute; right:14px; bottom:12px; width:min(44vw,500px); z-index:5;
-    background:rgba(255,253,248,.82); border:1px solid rgba(226,217,196,.65); border-radius:18px;
-    box-shadow:0 8px 28px rgba(35,32,26,.08); padding:8px 10px 6px;
+    position:absolute; left:clamp(10px,4vw,52px); top:50%; width:min(42vw,520px); z-index:5;
+    transform:translateY(-50%);
+    background:transparent; border:0; border-radius:0;
+    box-shadow:none; padding:0;
     transition:opacity .25s, transform .25s;
   }
-  #orbitPanel.hidden{ opacity:0; transform:translateY(10px); pointer-events:none; }
+  #orbitPanel.hidden{ opacity:0; transform:translateY(calc(-50% + 10px)); pointer-events:none; }
   #orbitTitle{
     display:flex; justify-content:space-between; align-items:baseline;
     font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
-    color:var(--ink-soft); padding:0 2px 4px;
+    color:var(--ink-soft); padding:0 8px 2px; opacity:.72;
   }
   #orbitTitle span:last-child{ font-weight:600; letter-spacing:0; text-transform:none; }
   #orbit{ width:100%; aspect-ratio:1/1; height:auto; display:block; }
-  #orbitHint{ font-size:10px; color:var(--ink-soft); text-align:center; padding:4px 0 1px; }
+  #orbitHint{ display:none; }
   #btnOrbit[aria-pressed="true"]{ background:#e9e2d2; }
-  @media (max-width:560px){
-    #orbitPanel{ width:176px; right:8px; bottom:56px; padding:6px 8px 4px; }
-    #orbitTitle{ font-size:9px; }
-    #orbitHint{ font-size:9px; }
+  @media (max-width:720px){
+    #orbitPanel{ width:min(52vw,220px); left:6px; top:auto; bottom:52px; transform:none; }
+    #orbitPanel.hidden{ transform:translateY(10px); }
+    #orbitTitle{ font-size:9px; padding-left:4px; }
   }
   @media (max-height: 540px){
-    #orbitPanel{ width:196px; }
-    #orbitHint{ display:none; }
+    #orbitPanel{ width:min(36vw,230px); bottom:4px; }
   }
 </style>
 <script type="importmap">
@@ -568,7 +568,7 @@ function orbitPoint(m,t){
     const vb=p.a0*sa+p.b0*ca;
     const g=getOrbitGeometry();
     const mid=g.radii[1], step=g.radii[2]-g.radii[1];
-    const ra=mid+va*step, rb=mid+vb*step;
+    const ra=mid-va*step, rb=mid-vb*step;
     const near={x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
     return intersectionForFamilies(p.familyA,ra,p.familyB,rb,p.groupKey,near);
   }
@@ -700,11 +700,12 @@ function settleCubies(cubies, angle){
 }
 
 function finishMove(){
-  const { pivot, cubies, move } = active;
-  settleCubies(cubies, active.angle);
+  const finished = active;
+  const { pivot, cubies, move } = finished;
+  settleCubies(cubies, finished.angle);
   cubeGroup.remove(pivot);
   active = null;
-  if (!active.isCancelledDrag){
+  if (!finished.isCancelledDrag){
     moveCount++;
     movesEl.textContent = moveCount;
     if (move.record) history.push(move);
@@ -1087,16 +1088,15 @@ function buildOrbitSlots(S){
   // Equilateral triangle centers
   // d decreased and r/d increased per Hans: inner clusters (yellow/green/orange)
   // need wider pairwise intersection zones, central triple-zone empty
-  const d = S * 0.28;  // center distance (was 0.433)
-  const h = d * Math.sqrt(3)/2;  // triangle height
+  // Measured from the reference video. With S=320 the source is approximately:
+  // center spacing 79.2px, radii 64.0 / 82.3 / 100.6px.
+  const d = S * 0.2476;
+  const h = d * Math.sqrt(3)/2;
   const T = [cx, cy - h*2/3];
   const L = [cx - d/2, cy + h/3];
   const R = [cx + d/2, cy + h/3];
-  
-  // Three radii per center (same for all, by symmetry)
-  // r/d ratios increased (was 0.538/0.654/0.769) for wider intersections
-  const r1 = d * 0.85, r2 = d * 1.00, r3 = d * 1.15;
-  const radii = [r1, r2, r3];
+
+  const radii = [S*0.2000, S*0.2572, S*0.3143];
   
   const centers = {T, L, R};
   const circles = [];
@@ -1136,7 +1136,7 @@ function getOrbitGeometry(){
   const S = orbitSize();
   if (!orbitCache || Math.abs(orbitCache.S - S) > 1){
     const {slots, circles, centers} = buildOrbitSlots(S);
-    orbitCache = {S, slots, circles, centers, radii:[S*0.28*0.85, S*0.28, S*0.28*1.15]};
+    orbitCache = {S, slots, circles, centers, radii:[S*0.2000, S*0.2572, S*0.3143]};
   }
   return orbitCache;
 }
@@ -1154,8 +1154,8 @@ const ORBIT_FACE_FOR_GROUP = {
 const ORBIT_GROUP_FOR_FACE = Object.fromEntries(
   Object.entries(ORBIT_FACE_FOR_GROUP).map(([k,v]) => [v,k])
 );
-const ORBIT_COORD_TO_RING = v => Math.max(0,Math.min(2,Math.round(v)+1));
-const ORBIT_RING_TO_COORD = ring => ring-1;
+const ORBIT_COORD_TO_RING = v => Math.max(0,Math.min(2,1-Math.round(v)));
+const ORBIT_RING_TO_COORD = ring => 1-ring;
 
 function solvedColorForSlot(slot){
   return ORBIT_FACE_FOR_GROUP[slot.pair + slot.side] || 'U';
@@ -1209,7 +1209,7 @@ function drawOrbit(){
   
   // Draw the 9 circles (with pan offset)
   otx.strokeStyle = 'rgba(70,70,70,0.42)';
-  otx.lineWidth = Math.max(1, S*0.003);
+  otx.lineWidth = Math.max(0.8, S*0.0022);
   for (const c of circles){
     otx.beginPath();
     otx.arc(c.x + orbitPanX, c.y + orbitPanY, c.r, 0, Math.PI*2);
@@ -1221,7 +1221,7 @@ function drawOrbit(){
   try { state = facelets(); } catch(e) { state = null; }
   
   // Sliding dots: 54 dots with fixed colors move between slots
-  const dotR = Math.max(4, S*0.019);
+  const dotR = Math.max(3.5, S*0.0205);
   const slotMap = getOrbitSlotMap();
   
   // Initialize dots in solved positions (first run)
@@ -1324,6 +1324,8 @@ function loop(now){
   viewGroup.rotation.order = 'XYZ';   // yaw about world Y, then pitch: verticals stay vertical
   viewGroup.rotation.y = yaw;
   viewGroup.rotation.x = pitch;
+  const wideComposition = stage.clientWidth >= 760;
+  viewGroup.position.x += ((wideComposition ? 2.35 : 0) - viewGroup.position.x) * 0.08;
   camera.position.set(0, 0.7, fitZoom() * zoomFactor);
   camera.lookAt(0, 0, 0);
 
@@ -1388,7 +1390,8 @@ window.__cube = {
   orbit: () => ({
     on:orbitOn,
     dots:orbitDots ? orbitDots.length : 0,
-    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.path?.kind || 'line'}))
+    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.path?.kind || 'line'})),
+    pathCounts:(layerDrag?.dotMap || active?.orbitMap || []).reduce((a,m)=>{const k=m.path?.kind||'line';a[k]=(a[k]||0)+1;return a;},{})
   }),
   orbitDotCount(){
     let n = 0;
