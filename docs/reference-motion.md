@@ -25,8 +25,10 @@ This file documents the interaction behavior measured from the supplied referenc
 
 - A face-to-face whole-cube rotation remaps the full 54-sticker projection.
 - 52 sticker positions move; the two points on the rotation axis remain fixed.
+- Every moving point stays locked to one of the active axis family's three gray circles.
+- Its radius is constant from the first pixel of the drag through the final orientation.
 - The orbit uses the same live angle as the 3D whole-cube rotation.
-- The circle tracks remain fixed while the colored points rearrange through them.
+- The circle tracks remain fixed while the colored points travel along them.
 
 ## Timing
 
