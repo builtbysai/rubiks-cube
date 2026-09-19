@@ -136,4 +136,46 @@ for(const axis of ['x','y','z']){
   }
 }
 
-console.log('orbit reference model: OK (54 nodes, face turns=20 moving stickers, view turns=52, all quarter-turn roundtrips)');
+// Enumerate the full 24-orientation cube rotation group and verify that a
+// face turn still projects exactly 20 moving sticker positions from every view.
+function stateKey(state){
+  return state.map(s=>s.p.join(',')+'|'+s.n.join(',')).join(';');
+}
+const orientations=[];
+const seen=new Set();
+const pending=[stickers()];
+while(pending.length){
+  const state=pending.shift();
+  const key=stateKey(state);
+  if(seen.has(key)) continue;
+  seen.add(key);
+  orientations.push(state);
+  for(const axis of ['x','y','z']){
+    pending.push(state.map(s=>({...s,p:rotate(s.p,axis,1),n:rotate(s.n,axis,1)})));
+  }
+}
+assert.equal(orientations.length,24,'cube should have exactly 24 face-to-face orientations');
+
+for(const oriented of orientations){
+  for(const [name,m] of Object.entries(MOVES)){
+    let moved=0;
+    for(const s of oriented){
+      const before=nodeFor(s.p,s.n,g);
+      const ai={x:0,y:1,z:2}[m.axis];
+      let p=s.p,n=s.n;
+      // Find the logical layer coordinate by rotating the original sticker
+      // position into this orientation along with the cube.
+      if(s.p[ai]===m.layer){
+        p=rotate(p,m.axis,m.dir);
+        n=rotate(n,m.axis,m.dir);
+      }
+      const after=nodeFor(p,n,g);
+      if(dist(before,after)>.001) moved++;
+    }
+    // Depending on orientation, the named logical face is a different visible
+    // face. The projection must still be a 20-sticker face turn.
+    assert.equal(moved,20,`${name} should still move 20 projected stickers from every orientation`);
+  }
+}
+
+console.log('orbit reference model: OK (54 nodes, 24 views, face turns=20, view turns=52, quarter-turn roundtrips)');
