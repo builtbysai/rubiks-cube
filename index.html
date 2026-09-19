@@ -445,7 +445,7 @@ function computeTurn(dx, dy){
 function decideTurn(dx, dy){
   const t = computeTurn(dx, dy);
   if (!t) return;
-  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:360, record:true});
+  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:500, record:true});
   noteActivity();
 }
 // Start a slow-drag: create pivot, attach cubies, track drag
@@ -480,103 +480,49 @@ function startLayerDrag(turn, startX, startY){
   }
 }
 // Build mapping of dot movements for a drag: matches dots between old and new states
-function circleById(id){
-  return getOrbitGeometry().circles.find(c => c.id === id) || null;
-}
-function parseOrbitCircle(id){
-  return {family:id[0], ring:Number(id.slice(1))};
-}
-function sharedCircle(a,b){
-  if (!a || !b) return null;
-  const id=a.circles.find(x => b.circles.includes(x));
-  return id ? circleById(id) : null;
-}
 function shortestAngleDelta(a0,a1){
   let d=a1-a0;
   while(d>Math.PI)d-=Math.PI*2;
   while(d<-Math.PI)d+=Math.PI*2;
   return d;
 }
-function intersectionForFamilies(f1,r1,f2,r2,groupKey,near){
-  const g=getOrbitGeometry();
-  const c1=g.centers[f1], c2=g.centers[f2];
-  const pts=circleIntersections(c1[0],c1[1],r1,c2[0],c2[1],r2);
-  if (!pts.length) return near || {x:g.S/2,y:g.S/2};
-  const sideWanted=groupKey.slice(-1);
-  const pair=groupKey.slice(0,2);
-  const [n1,n2]=pair.split('');
-  const p1=g.centers[n1], p2=g.centers[n2];
-  const good=pts.filter(([x,y])=>{
-    const cross=(p2[0]-p1[0])*(y-p1[1])-(p2[1]-p1[1])*(x-p1[0]);
-    return (cross>0?'A':'B')===sideWanted;
-  });
-  const candidates=good.length?good:pts;
-  if (!near) return {x:candidates[0][0],y:candidates[0][1]};
-  candidates.sort((a,b)=>
-    Math.hypot(a[0]-near.x,a[1]-near.y)-Math.hypot(b[0]-near.x,b[1]-near.y)
-  );
-  return {x:candidates[0][0],y:candidates[0][1]};
-}
 
+// This is the key behavior in the reference animation.
+// A turn about X/Y/Z is visualized around the matching X/Y/Z circle center.
+// Every affected sticker interpolates in POLAR coordinates around that center:
+// angle sweeps continuously and radius interpolates continuously. Stickers on
+// the adjacent strips have equal start/end radii, so they ride the drawn ring;
+// stickers on the turned face spiral smoothly between rings. No snapping.
 function buildOrbitPath(oldSlot,newSlot,move){
-  const circle=sharedCircle(oldSlot,newSlot);
-  if(circle){
-    const a0=Math.atan2(oldSlot.y-circle.y,oldSlot.x-circle.x);
-    const a1=Math.atan2(newSlot.y-circle.y,newSlot.x-circle.x);
-    return {kind:'circle',cx:circle.x,cy:circle.y,r:circle.r,a0,da:shortestAngleDelta(a0,a1)};
-  }
+  const g=getOrbitGeometry();
+  const family=ORBIT_FAMILY_FOR_AXIS[move.axis];
+  const center=g.centers[family];
+  const x0=oldSlot.x-center[0], y0=oldSlot.y-center[1];
+  const x1=newSlot.x-center[0], y1=newSlot.y-center[1];
+  const r0=Math.hypot(x0,y0), r1=Math.hypot(x1,y1);
+  const a0=Math.atan2(y0,x0), a1=Math.atan2(y1,x1);
+  let da=shortestAngleDelta(a0,a1);
 
-  // Sticker lies on the face being turned. Its two layer coordinates rotate
-  // continuously. Convert those coordinates to continuously varying radii and
-  // intersect the corresponding two axis-circle families every frame.
-  const groupKey=oldSlot.pair+oldSlot.side;
-  const oldCs=oldSlot.circles.map(parseOrbitCircle);
-  const newCs=newSlot.circles.map(parseOrbitCircle);
-  const byFamilyOld=Object.fromEntries(oldCs.map(q=>[q.family,q]));
-  const byFamilyNew=Object.fromEntries(newCs.map(q=>[q.family,q]));
-  const families=Object.keys(byFamilyOld);
-  if(families.length===2 && families.every(k=>byFamilyNew[k])){
-    const a=families[0], b=families[1];
-    const a0=ORBIT_RING_TO_COORD(byFamilyOld[a].ring);
-    const b0=ORBIT_RING_TO_COORD(byFamilyOld[b].ring);
-    const a1=ORBIT_RING_TO_COORD(byFamilyNew[a].ring);
-    const b1=ORBIT_RING_TO_COORD(byFamilyNew[b].ring);
-    let quarter=1;
-    // Pick the signed 90-degree rotation in this 2D coordinate plane that
-    // lands on the exact destination coordinates.
-    const plus=[-b0,a0], minus=[b0,-a0];
-    if (Math.abs(plus[0]-a1)+Math.abs(plus[1]-b1) <=
-        Math.abs(minus[0]-a1)+Math.abs(minus[1]-b1)) quarter=1;
-    else quarter=-1;
-    return {kind:'face',familyA:a,familyB:b,a0,b0,quarter,groupKey};
+  // A 180-degree cube move is ambiguous under shortest-angle wrapping.
+  // Keep its sweep direction stable with the cube move.
+  if (move.turns===2 && Math.abs(Math.abs(da)-Math.PI)<0.18){
+    da=Math.sign(move.dir || 1)*Math.PI;
   }
-  return {kind:'line',x0:oldSlot.x,y0:oldSlot.y,x1:newSlot.x,y1:newSlot.y};
+  return {kind:'polar',cx:center[0],cy:center[1],r0,r1,a0,da};
 }
 
 function orbitPoint(m,t){
   t=Math.max(0,Math.min(1,t));
   const p=m.path;
   if(!p) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
-  if(p.kind==='circle'){
+  if(p.kind==='polar'){
+    const r=p.r0+(p.r1-p.r0)*t;
     const a=p.a0+p.da*t;
-    return {x:p.cx+Math.cos(a)*p.r,y:p.cy+Math.sin(a)*p.r};
+    return {x:p.cx+Math.cos(a)*r,y:p.cy+Math.sin(a)*r};
   }
-  if(p.kind==='face'){
-    const theta=p.quarter*(Math.PI/2)*t;
-    const ca=Math.cos(theta), sa=Math.sin(theta);
-    const va=p.a0*ca-p.b0*sa;
-    const vb=p.a0*sa+p.b0*ca;
-    const g=getOrbitGeometry();
-    const mid=g.radii[1], step=g.radii[2]-g.radii[1];
-    const ra=mid-va*step, rb=mid-vb*step;
-    const near={x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
-    return intersectionForFamilies(p.familyA,ra,p.familyB,rb,p.groupKey,near);
-  }
-  return {x:p.x0+(p.x1-p.x0)*t,y:p.y0+(p.y1-p.y0)*t};
+  return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
 }
 
-// Persistent physical sticker identity means every dot has one unambiguous
-// source and destination node for a move.
 function buildDragDotMap(oldIds,newIds,move){
   const slotMap=getOrbitSlotMap();
   if(!slotMap || slotMap.length!==54 || !orbitDots || orbitDots.length!==54) return null;
@@ -625,19 +571,22 @@ function finishLayerDrag(){
   if (actualTurns === 0){
     const dragOrbitMap = layerDrag.dotMap;
     const startAngle = layerDrag.visualAngle ?? currentAngle ?? 0;
-    active = {pivot, cubies, axis, angle:0, t:0, dur:0.34,
-              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:300, record:false},
+    const returnDur=Math.max(0.10,0.50*Math.min(1,Math.abs(startAngle)/(Math.PI/2)));
+    active = {pivot, cubies, axis, angle:0, t:0, dur:returnDur,
+              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:returnDur*1000, record:false},
               fromAngle:startAngle, isDragFinish:true, isCancelledDrag:true,
               orbitMap:dragOrbitMap, orbitStartAngle:startAngle, orbitBaseAngle:(layerDrag.pathAngle || Math.sign(startAngle||1)*Math.PI/2)};
     layerDrag = null;
     return;
   }
   // Animate from current to target, then finish as a move
-  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:340, record:true};
-  // Set up as an active move starting from current angle
-  const startAngle = currentAngle || 0;
+  const startAngle = layerDrag.visualAngle ?? currentAngle ?? 0;
+  const remaining=Math.abs(targetAngle-startAngle)/(Math.PI/2);
+  const finishDur=Math.max(0.10,0.50*Math.min(1,remaining));
+  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:finishDur*1000, record:true};
+  // Continue from the exact angle already visible on screen.
   const dragOrbitMap = layerDrag.dotMap;
-  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.34, move,
+  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:finishDur, move,
             fromAngle:startAngle, isDragFinish:true, orbitMap:dragOrbitMap, orbitStartAngle:startAngle, orbitBaseAngle:(layerDrag.pathAngle || targetAngle || Math.PI/2)};
   layerDrag = null;
   noteActivity();
@@ -883,7 +832,7 @@ function doScramble(n=25){
     last = fi;
     const r = Math.random();
     const token = faces[fi] + (r < 0.33 ? "'" : r < 0.5 ? '2' : '');
-    queue.push({ ...parseMove(token), duration:105, record:true });
+    queue.push({ ...parseMove(token), duration:210, record:true });
   }
   showStatus('Scrambling…');
 }
@@ -893,7 +842,7 @@ function doUndo(){
   const m = history.pop();
   if (!m){ showStatus('Nothing to undo.'); return; }
   hideWin();
-  queue.push({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:160, record:false });
+  queue.push({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:420, record:false });
   noteActivity();
 }
 
@@ -981,7 +930,7 @@ async function doSolve(){
   showStatus('Solution · ' + tokens.length + ' moves: ' + sol, true);
   solving = true;
   restartTimer();
-  for (const t of tokens) queue.push({ ...parseMove(t), duration:150, record:false });
+  for (const t of tokens) queue.push({ ...parseMove(t), duration:460, record:false });
 }
 
 /* --------------------------------- UI -------------------------------------- */
@@ -1000,7 +949,7 @@ for (const row of [['R','L','U','D','F','B'], ["R'","L'","U'","D'","F'","B'"]]){
     b.addEventListener('click', () => {
       if (inputLocked() || busy()) return;
       hideWin();
-      queue.push({ ...parseMove(t), duration:190, record:true });
+      queue.push({ ...parseMove(t), duration:500, record:true });
       noteActivity();
     });
     pad.appendChild(b);
@@ -1013,7 +962,7 @@ window.addEventListener('keydown', e => {
   if (!MOVES[k] || inputLocked() || busy()) return;
   hideWin();
   const token = e.shiftKey ? k + "'" : k;
-  queue.push({ ...parseMove(token), duration:190, record:true });
+  queue.push({ ...parseMove(token), duration:500, record:true });
   noteActivity();
 });
 
@@ -1382,7 +1331,7 @@ window.__cube = {
     for (const t of notation.trim().split(/\s+/)){
       if (!t) continue;
       const m = { ...parseMove(t), record:true };
-      if (instant) applyInstant(m); else queue.push({ ...m, duration:360 });
+      if (instant) applyInstant(m); else queue.push({ ...m, duration:500 });
     }
     moveCount += 0;
   },
