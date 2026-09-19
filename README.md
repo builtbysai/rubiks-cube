@@ -8,8 +8,8 @@ Live: https://builtbysai.com/rubiks-cube/
 
 ## What it does
 
-- **3D cube, reference-matched palette.** 27 cubies with rounded black plastic
-  bodies and the six-color palette used by the 2D/3D reference animation.
+- **3D cube, classic Rubik palette.** 27 cubies with rounded black plastic
+  bodies and the familiar white, yellow, green, blue, red, and orange faces.
 - **Turn layers by dragging.** Grab any sticker and drag: the layer follows
   your gesture, with smooth animated quarter turns.
 - **Orbit, zoom, keyboard.** Drag the background to orbit, scroll or pinch to
