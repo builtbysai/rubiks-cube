@@ -23,13 +23,11 @@ This file documents the interaction behavior measured from the supplied referenc
 
 ## Whole-cube view changes
 
-- A face-to-face whole-cube rotation remaps the full 54-sticker projection.
-- 52 sticker positions move; the two points on the rotation axis remain fixed.
-- 44 moving points travel directly along one gray circle from source node to destination node.
-- The remaining 8 travel along one circle, switch tracks at an existing intersection, then continue along a second circle.
-- No whole-cube rotation point cuts through open space between tracks.
+- A face-to-face whole-cube rotation is treated as three simultaneous slice turns around one axis.
+- 52 sticker positions move; the two axis-facing face centers remain fixed.
+- 36 points are locked to the active axis family's three circles: 12 on the inner ring, 12 on the middle ring, and 12 on the outer ring.
+- The remaining 16 are the perimeter stickers of the two faces normal to the rotation axis; they move through radial space exactly like the 8 face-perimeter points of a normal face twist.
 - The orbit uses the same live angle as the 3D whole-cube rotation.
-- The gray circle network remains fixed while the colored points travel through it.
 
 ## Timing
 
