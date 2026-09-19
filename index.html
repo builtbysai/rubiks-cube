@@ -271,6 +271,21 @@ function orientMoveForView(move, q){
   return {...move, axis:ax, dir:(move.dir || 1)*sign};
 }
 
+function localAxisForVisualAxis(visualAxis, desiredDir){
+  // At a snapped view orientation, exactly one local cube axis maps to each
+  // visual X/Y/Z axis. This keeps horizontal swipes rotating around whichever
+  // face is currently "up", even after the cube has been pitched.
+  for(const localAxis of ['x','y','z']){
+    _viewAxis.set(0,0,0); _viewAxis[localAxis]=1;
+    _viewAxis.applyQuaternion(viewOrientationQ);
+    const mapped=Math.abs(_viewAxis.x)>.5?'x':Math.abs(_viewAxis.y)>.5?'y':'z';
+    if(mapped!==visualAxis) continue;
+    const sign=Math.sign(_viewAxis[visualAxis]) || 1;
+    return {axis:localAxis,dir:desiredDir*sign};
+  }
+  return {axis:visualAxis,dir:desiredDir};
+}
+
 // Standard Singmaster notation mapped to {axis, layer, dir}.
 // dir is the sign of a quarter turn about the positive axis; a prime flips it.
 const MOVES = {
@@ -438,6 +453,8 @@ function startViewDrag(axis, dir, startX, startY){
   const visualMove=orientMoveForView(logicalMove,viewOrientationQ);
   viewDrag={
     axis,dir,startX,startY,angle:0,
+    screenAxis:visualMove.axis==='y'?'horizontal':'vertical',
+    screenDir:visualMove.dir,
     targetQ,targetPerm,visualMove,
     dotMap:buildDragDotMap(oldIds,newIds,visualMove),
   };
@@ -446,8 +463,10 @@ function startViewDrag(axis, dir, startX, startY){
 
 function updateViewDrag(curX,curY){
   if(!viewDrag) return;
-  const delta=viewDrag.axis==='y' ? curX-viewDrag.startX : curY-viewDrag.startY;
-  const progress=Math.max(0,Math.min(1,(delta*viewDrag.dir)/VIEW_DRAG_PX));
+  const delta=viewDrag.screenAxis==='horizontal'
+    ? curX-viewDrag.startX
+    : curY-viewDrag.startY;
+  const progress=Math.max(0,Math.min(1,(delta*viewDrag.screenDir)/VIEW_DRAG_PX));
   viewDrag.angle=viewDrag.dir*progress*Math.PI/2;
 }
 
@@ -511,10 +530,10 @@ canvas.addEventListener('pointermove', e => {
     if (!viewDrag){
       if (Math.hypot(dx,dy) < 10) return;
       const horizontal=Math.abs(dx)>=Math.abs(dy);
-      const axis=horizontal?'y':'x';
       const signed=horizontal?dx:dy;
-      const dir=Math.sign(signed) || 1;
-      if (!startViewDrag(axis,dir,downInfo.sx,downInfo.sy)) return;
+      const desiredDir=Math.sign(signed) || 1;
+      const turn=localAxisForVisualAxis(horizontal?'y':'x',desiredDir);
+      if (!startViewDrag(turn.axis,turn.dir,downInfo.sx,downInfo.sy)) return;
     }
     updateViewDrag(e.clientX,e.clientY);
     return;
