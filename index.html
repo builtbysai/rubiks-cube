@@ -660,16 +660,20 @@ function shortestAngleDelta(a0,a1){
   return d;
 }
 
-function orbitDirectionForMove(move){
-  // Canvas angles increase clockwise because +Y points downward.
-  // Standard clockwise face turns therefore all use +1 regardless of which
-  // face is currently visible. Prime/reverse turns use -1. Whole-cube view
-  // rotations use the same convention from the gesture's visual direction.
-  if(move.layer !== undefined && move.layer !== null){
-    const layerSign=Math.sign(move.layer) || 1;
-    return Math.sign(-(move.dir || 1)*layerSign) || 1;
+function orbitDirectionForPaths(rawPaths, move){
+  // Pick ONE direction for the entire move. The reference shows all moving
+  // points sweeping together around the active axis center. We choose the
+  // common direction with the lower total angular travel, which preserves
+  // that behavior without forcing any individual sticker to take a nearly
+  // full revolution just because it crossed the -PI/+PI seam.
+  if(move.orbitDirection) return Math.sign(move.orbitDirection) || 1;
+  let positiveCost=0, negativeCost=0;
+  for(const p of rawPaths){
+    const d=shortestAngleDelta(p.a0,p.a1);
+    positiveCost += d >= 0 ? d : d + Math.PI*2;
+    negativeCost += d <= 0 ? -d : Math.PI*2 - d;
   }
-  return Math.sign(-(move.dir || 1)) || 1;
+  return positiveCost <= negativeCost ? 1 : -1;
 }
 
 function directedAngleDelta(a0,a1,direction){
@@ -691,7 +695,7 @@ function directedAngleDelta(a0,a1,direction){
 // angle sweeps continuously and radius interpolates continuously. Stickers on
 // the adjacent strips have equal start/end radii, so they ride the drawn ring;
 // stickers on the turned face spiral smoothly between rings. No snapping.
-function buildOrbitPath(oldSlot,newSlot,move){
+function buildOrbitPath(oldSlot,newSlot,move,direction){
   const g=getOrbitGeometry();
   const family=ORBIT_FAMILY_FOR_AXIS[move.axis];
   const center=g.centers[family];
@@ -699,7 +703,6 @@ function buildOrbitPath(oldSlot,newSlot,move){
   const x1=newSlot.x-center[0], y1=newSlot.y-center[1];
   const r0=Math.hypot(x0,y0), r1=Math.hypot(x1,y1);
   const a0=Math.atan2(y0,x0), a1=Math.atan2(y1,x1);
-  const direction=orbitDirectionForMove(move);
   let da=directedAngleDelta(a0,a1,direction);
 
   // Half turns are expanded into two visible quarter turns elsewhere, but
@@ -730,17 +733,29 @@ function buildDragDotMap(oldIds,newIds,move){
     oldSlotById.set(oldIds[globalIdx],slot);
     newSlotById.set(newIds[globalIdx],slot);
   }
-  const map=[];
+
+  const g=getOrbitGeometry();
+  const family=ORBIT_FAMILY_FOR_AXIS[move.axis];
+  const center=g.centers[family];
+  const raw=[];
   for(const dot of orbitDots){
     const oldSlot=oldSlotById.get(dot.id), newSlot=newSlotById.get(dot.id);
     if(!oldSlot || !newSlot) continue;
     if(Math.hypot(oldSlot.x-newSlot.x,oldSlot.y-newSlot.y)<0.01) continue;
-    map.push({
-      dot,oldX:oldSlot.x,oldY:oldSlot.y,newX:newSlot.x,newY:newSlot.y,
-      path:buildOrbitPath(oldSlot,newSlot,move)
+    raw.push({
+      dot,oldSlot,newSlot,
+      a0:Math.atan2(oldSlot.y-center[1],oldSlot.x-center[0]),
+      a1:Math.atan2(newSlot.y-center[1],newSlot.x-center[0])
     });
   }
-  return map;
+
+  const direction=orbitDirectionForPaths(raw,move);
+  return raw.map(p => ({
+    dot:p.dot,
+    oldX:p.oldSlot.x,oldY:p.oldSlot.y,
+    newX:p.newSlot.x,newY:p.newSlot.y,
+    path:buildOrbitPath(p.oldSlot,p.newSlot,{...move,orbitDirection:direction},direction)
+  }));
 }
 
 // Update layer drag from current pointer position
@@ -764,9 +779,10 @@ function finishLayerDrag(){
   if (!layerDrag) return;
   const {pivot, cubies, axis, dir, currentAngle} = layerDrag;
   // Snap to nearest 90 degrees
-  const quarterTurns = Math.round((currentAngle || 0) / (Math.PI/2));
+  const dragAngle=currentAngle || 0;
+  const quarterTurns = Math.abs(dragAngle) >= Math.PI/4 ? Math.sign(dragAngle) : 0;
   const targetAngle = quarterTurns * (Math.PI/2);
-  const actualTurns = Math.abs(quarterTurns) % 4;
+  const actualTurns = Math.abs(quarterTurns);
   // If snapped to 0 (no meaningful turn), just put cubies back
   if (actualTurns === 0){
     const dragOrbitMap = layerDrag.dotMap;
@@ -1626,7 +1642,10 @@ window.__cube = {
       out[name]={moving:paths.length,paths:counts,axis:visualMove.axis,dir:visualMove.dir};
     }
     active=savedActive;
-    return {ok:Object.values(out).every(x=>x.moving===20 && x.paths.polar===20),moves:out};
+    return {
+      ok:Object.values(out).every(x=>x.moving===20 && x.paths.polar===20),
+      moves:out
+    };
   },
   validateView(){
     if (!orbitDots || orbitDots.length !== 54) return {ok:false, reason:'orbit not initialized'};
