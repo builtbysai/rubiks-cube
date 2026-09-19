@@ -26,11 +26,11 @@ Live: https://builtbysai.com/rubiks-cube/
   table setup.
 - **Live 2D axis projection.** The cube's X, Y, and Z rotation axes are
   represented by three families of three concentric circles. All 54 physical
-  stickers have stable identities in both views. During a turn, every affected
-  sticker moves in polar coordinates around the matching axis center, using
-  the exact same normalized animation progress as the 3D layer. Adjacent-strip
-  stickers stay on a drawn ring while face stickers sweep smoothly between
-  radii, matching the behavior of the reference animation.
+  stickers have stable identities in both views. During a turn, the 20 affected stickers split into the same two motion classes
+  visible in the reference: 12 adjacent-strip stickers are locked exactly to
+  the active gray circle track, while the 8 rotating-face perimeter stickers
+  move through the radial space between rings. Both use the exact same
+  normalized animation progress as the 3D layer.
 - **Timer, move counter, win detection.** The clock starts on your first
   turn and stops when every face is uniform again.
 
