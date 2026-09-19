@@ -194,6 +194,7 @@ for(const [name,m] of Object.entries(MOVES)){
     const p=rotate(s.p,m.axis,m.dir);
     const n=rotate(s.n,m.axis,m.dir);
     const after=nodeFor(p,n,g);
+    if(dist(before,after)<=.001) continue; // fixed face center
     const r0=Math.hypot(before.x-center[0],before.y-center[1]);
     const r1=Math.hypot(after.x-center[0],after.y-center[1]);
     if(Math.abs(r0-activeRadius)<1e-6 && Math.abs(r1-activeRadius)<1e-6) trackCount++;
