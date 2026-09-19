@@ -767,6 +767,27 @@ const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff17
 const orbitPanel = document.getElementById('orbitPanel');
 const orbitCanvas = document.getElementById('orbit');
 const otx = orbitCanvas.getContext('2d');
+// Drag to pan the orbit diagram
+orbitCanvas.style.cursor = 'grab';
+orbitCanvas.addEventListener('pointerdown', (e) => {
+  orbitDragging = true;
+  orbitDragSX = e.clientX; orbitDragSY = e.clientY;
+  orbitPanSX = orbitPanX; orbitPanSY = orbitPanY;
+  orbitCanvas.style.cursor = 'grabbing';
+  orbitCanvas.setPointerCapture(e.pointerId);
+});
+orbitCanvas.addEventListener('pointermove', (e) => {
+  if (!orbitDragging) return;
+  const scale = orbitCanvas.width / orbitCanvas.getBoundingClientRect().width;
+  orbitPanX = orbitPanSX + (e.clientX - orbitDragSX) * scale;
+  orbitPanY = orbitPanSY + (e.clientY - orbitDragSY) * scale;
+});
+const endOrbitDrag = (e) => {
+  orbitDragging = false;
+  orbitCanvas.style.cursor = 'grab';
+};
+orbitCanvas.addEventListener('pointerup', endOrbitDrag);
+orbitCanvas.addEventListener('pointercancel', endOrbitDrag);
 const orbitCountEl = document.getElementById('orbitCount');
 const btnOrbit = document.getElementById('btnOrbit');
 let orbitOn = true;
@@ -804,16 +825,18 @@ function buildOrbitSlots(S){
   // Three centers at equilateral triangle vertices
   // Scaled to fit S x S panel with margin
   const cx = S/2, cy = S/2;
-  // Equilateral triangle centers (verified against reference)
-  const d = S * 0.433;  // center distance
+  // Equilateral triangle centers
+  // d decreased and r/d increased per Hans: inner clusters (yellow/green/orange)
+  // need wider pairwise intersection zones, central triple-zone empty
+  const d = S * 0.28;  // center distance (was 0.433)
   const h = d * Math.sqrt(3)/2;  // triangle height
   const T = [cx, cy - h*2/3];
   const L = [cx - d/2, cy + h/3];
   const R = [cx + d/2, cy + h/3];
   
   // Three radii per center (same for all, by symmetry)
-  // r1 > d/2 so all circles intersect
-  const r1 = d * 0.538, r2 = d * 0.654, r3 = d * 0.769;
+  // r/d ratios increased (was 0.538/0.654/0.769) for wider intersections
+  const r1 = d * 0.85, r2 = d * 1.00, r3 = d * 1.15;
   const radii = [r1, r2, r3];
   
   const centers = {T, L, R};
@@ -936,18 +959,28 @@ function getOrbitSlotMap(){
   return orbitSlotMap;
 }
 
+// Smooth color transitions for orbit dots
+// Each slot tracks its current displayed RGB, lerping toward the target
+let orbitDotColors = null;  // Array of [r,g,b] per slotMap index
+// Pan/drag the orbit diagram (Hans: "slowly drag or move it")
+let orbitPanX = 0, orbitPanY = 0;
+let orbitDragging = false, orbitDragSX = 0, orbitDragSY = 0, orbitPanSX = 0, orbitPanSY = 0;
+function hexToRgb(hex){
+  const h = hex.replace('#','');
+  return [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16)];
+}
 function drawOrbit(){
   if (!orbitOn) return;
   const S = orbitSize();
   const {slots, circles} = getOrbitGeometry();
   otx.clearRect(0, 0, S, S);
   
-  // Draw the 9 circles
+  // Draw the 9 circles (with pan offset)
   otx.strokeStyle = 'rgba(120,120,120,0.45)';
   otx.lineWidth = Math.max(1, S*0.003);
   for (const c of circles){
     otx.beginPath();
-    otx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+    otx.arc(c.x + orbitPanX, c.y + orbitPanY, c.r, 0, Math.PI*2);
     otx.stroke();
   }
   
@@ -956,21 +989,36 @@ function drawOrbit(){
   try { state = facelets(); } catch(e) { state = null; }
   
   // Draw the 54 dots at intersections, colored by current cube state
+  // with smooth fade transitions instead of snapping
   const dotR = Math.max(4, S*0.022);
   const slotMap = getOrbitSlotMap();
-  for (const {slot, globalIdx} of slotMap){
+  if (!orbitDotColors || orbitDotColors.length !== slotMap.length){
+    orbitDotColors = slotMap.map(() => [255,255,255]);
+  }
+  const lerpSpeed = 0.18;  // fade speed (0-1, higher = faster)
+  for (let i=0; i<slotMap.length; i++){
+    const {slot, globalIdx} = slotMap[i];
     let face = 'U';
     if (state && globalIdx < state.length){
       face = state[globalIdx];
     } else {
-      // Fallback to solved colors
       face = solvedColorForSlot(slot, S);
     }
-    otx.fillStyle = ORBIT_CSS[face] || '#888';
+    const target = hexToRgb(ORBIT_CSS[face] || '#888888');
+    const cur = orbitDotColors[i];
+    // Lerp toward target
+    cur[0] += (target[0] - cur[0]) * lerpSpeed;
+    cur[1] += (target[1] - cur[1]) * lerpSpeed;
+    cur[2] += (target[2] - cur[2]) * lerpSpeed;
+    // Snap when close enough
+    if (Math.abs(target[0]-cur[0])<1 && Math.abs(target[1]-cur[1])<1 && Math.abs(target[2]-cur[2])<1){
+      cur[0]=target[0]; cur[1]=target[1]; cur[2]=target[2];
+    }
+    otx.fillStyle = `rgb(${Math.round(cur[0])},${Math.round(cur[1])},${Math.round(cur[2])})`;
     otx.strokeStyle = 'rgba(35,32,26,0.6)';
     otx.lineWidth = Math.max(0.8, S*0.002);
     otx.beginPath();
-    otx.arc(slot.x, slot.y, dotR, 0, Math.PI*2);
+    otx.arc(slot.x + orbitPanX, slot.y + orbitPanY, dotR, 0, Math.PI*2);
     otx.fill();
     otx.stroke();
   }
@@ -983,7 +1031,7 @@ btnOrbit.addEventListener('click', () => {
   btnOrbit.setAttribute('aria-pressed', String(orbitOn));
   orbitPanel.classList.toggle('hidden', !orbitOn);
   if (orbitOn){
-    orbitCache = null; orbitSlotMap = null;
+    orbitCache = null; orbitSlotMap = null; orbitDotColors = null;
     sizeOrbitCanvas();
   }
 });
