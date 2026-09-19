@@ -514,6 +514,248 @@
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.001ms!important;}
   }
+
+  /* --- polished stage/minimap + guided solve experience --- */
+  #workspace{
+    position:relative;
+    display:block;
+    width:min(1180px,calc(100% - 28px));
+    min-height:0;
+    padding-bottom:10px;
+  }
+  #workspace.orbit-hidden{display:block;}
+  #stage{
+    width:100%;
+    height:100%;
+    min-height:0;
+    border-radius:26px;
+  }
+
+  #orbitPanel{
+    position:absolute;
+    z-index:7;
+    top:14px;
+    left:14px;
+    width:clamp(118px,15vw,176px);
+    height:auto;
+    min-height:0;
+    padding:9px;
+    display:block;
+    border:1px solid rgba(82,72,55,.14);
+    border-radius:17px;
+    background:rgba(255,253,248,.76);
+    box-shadow:0 12px 34px rgba(55,47,34,.09);
+    backdrop-filter:blur(18px);
+    overflow:hidden;
+    transition:opacity .18s ease,transform .18s ease;
+  }
+  #orbitPanel::before{display:none;}
+  #orbitPanel.hidden{
+    display:block;
+    opacity:0;
+    transform:translateY(-6px) scale(.97);
+    pointer-events:none;
+  }
+  #orbitTitle{
+    margin:0 0 3px;
+    padding:0 1px;
+    font-size:8.5px;
+    letter-spacing:.12em;
+  }
+  #orbitTitle span:last-child{display:none;}
+  #orbit{
+    width:100%;
+    max-width:none;
+    max-height:none;
+    margin:0;
+    aspect-ratio:1;
+  }
+  #orbitHint{display:none;}
+
+  #solveTray{
+    position:absolute;
+    z-index:10;
+    right:14px;
+    bottom:14px;
+    width:min(430px,calc(100% - 28px));
+    padding:14px;
+    border:1px solid rgba(82,72,55,.15);
+    border-radius:20px;
+    background:rgba(255,253,248,.92);
+    box-shadow:0 18px 54px rgba(45,38,28,.14);
+    backdrop-filter:blur(22px);
+    transform-origin:bottom right;
+    transition:opacity .18s ease,transform .18s ease;
+  }
+  #solveTray.hidden{
+    opacity:0;
+    transform:translateY(10px) scale(.985);
+    pointer-events:none;
+  }
+  .solveHead{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:14px;
+    margin-bottom:10px;
+  }
+  .solveEyebrow{
+    margin-bottom:3px;
+    color:var(--ink-faint);
+    font-size:9px;
+    font-weight:760;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+  }
+  #solveSummary{
+    font-size:17px;
+    line-height:1.15;
+    font-weight:760;
+    letter-spacing:-.025em;
+  }
+  #btnCloseSolve{
+    min-height:30px;
+    padding:5px 9px;
+    border-radius:9px;
+    color:var(--ink-soft);
+    font-size:11px;
+  }
+  .solveNowRow{
+    display:grid;
+    grid-template-columns:1fr 1fr auto;
+    gap:7px;
+    margin-bottom:9px;
+  }
+  .solveReadout{
+    min-width:0;
+    padding:7px 9px;
+    border:1px solid var(--line);
+    border-radius:11px;
+    background:rgba(255,255,255,.54);
+  }
+  .solveReadout .label{
+    display:block;
+    margin-bottom:2px;
+    color:var(--ink-faint);
+    font-size:8px;
+    font-weight:720;
+    text-transform:uppercase;
+    letter-spacing:.09em;
+  }
+  .solveReadout strong{
+    display:block;
+    overflow:hidden;
+    color:var(--ink);
+    font-size:13px;
+    line-height:1.1;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  #solveProgressText{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0 3px;
+    color:var(--ink-soft);
+    font-size:10px;
+    font-variant-numeric:tabular-nums;
+  }
+  .solveProgressTrack{
+    height:4px;
+    margin-bottom:10px;
+    overflow:hidden;
+    border-radius:999px;
+    background:rgba(82,72,55,.10);
+  }
+  #solveProgressBar{
+    width:0%;
+    height:100%;
+    border-radius:inherit;
+    background:var(--ink);
+    transition:width .18s ease;
+  }
+  #solveMoves{
+    display:flex;
+    gap:5px;
+    min-height:36px;
+    margin:0 -2px 10px;
+    padding:2px 2px 5px;
+    overflow-x:auto;
+    overscroll-behavior-inline:contain;
+    scrollbar-width:thin;
+    scroll-snap-type:x proximity;
+  }
+  .solveMove{
+    flex:0 0 auto;
+    min-width:34px;
+    height:31px;
+    display:grid;
+    place-items:center;
+    padding:0 8px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    background:rgba(255,255,255,.58);
+    color:var(--ink-soft);
+    font-size:11px;
+    font-weight:720;
+    scroll-snap-align:center;
+    transition:background .15s,border-color .15s,color .15s,transform .15s;
+  }
+  .solveMove.done{opacity:.42;}
+  .solveMove.current{
+    border-color:var(--ink);
+    background:var(--ink);
+    color:#fffaf0;
+    transform:translateY(-1px);
+  }
+  .solveActions{
+    display:grid;
+    grid-template-columns:1.15fr repeat(4,1fr);
+    gap:5px;
+  }
+  .solveActions button{
+    min-height:34px;
+    padding:6px 8px;
+    border-radius:10px;
+    font-size:10.5px;
+  }
+
+  @media (max-width:760px){
+    #workspace{
+      width:calc(100% - 16px);
+      display:block;
+      padding-bottom:8px;
+    }
+    #stage{height:100%;border-radius:20px;}
+    #orbitPanel{
+      top:9px;
+      left:9px;
+      width:108px;
+      padding:7px;
+      border-radius:14px;
+    }
+    #orbitTitle{font-size:7.5px;margin-bottom:1px;}
+    #solveTray{
+      position:absolute;
+      left:8px;
+      right:8px;
+      bottom:8px;
+      width:auto;
+      padding:11px;
+      border-radius:17px;
+      transform-origin:bottom center;
+    }
+    .solveNowRow{grid-template-columns:1fr 1fr;}
+    #solveProgressText{grid-column:1 / -1;justify-content:flex-start;padding:0 2px;}
+    .solveActions{grid-template-columns:1.2fr repeat(4,1fr);}
+    .solveActions button{padding:5px 4px;font-size:9.5px;}
+  }
+
+  @media (max-height:620px) and (min-width:700px){
+    #workspace{display:block;width:calc(100% - 20px);}
+    #orbitPanel{width:108px;top:8px;left:8px;padding:6px;}
+    #solveTray{width:390px;right:8px;bottom:8px;padding:10px;}
+  }
 </style>
 <script type="importmap">
 {
@@ -539,14 +781,48 @@
 </header>
 
 <div id="workspace">
-  <aside id="orbitPanel" aria-label="Live orbit projection">
-    <div id="orbitTitle"><span>Orbit map</span><span id="orbitCount"></span></div>
-    <canvas id="orbit"></canvas>
-    <div id="orbitHint">Live 54-sticker projection. It mirrors every twist and face-to-face rotation.</div>
-  </aside>
-
   <main id="stage" aria-label="Interactive Rubik's Cube">
     <canvas id="c"></canvas>
+
+    <aside id="orbitPanel" aria-label="Live orbit minimap">
+      <div id="orbitTitle"><span>Orbit</span><span id="orbitCount"></span></div>
+      <canvas id="orbit"></canvas>
+      <div id="orbitHint">Live projection</div>
+    </aside>
+
+    <section id="solveTray" class="hidden" aria-label="Solution guide" aria-live="polite">
+      <div class="solveHead">
+        <div>
+          <div class="solveEyebrow">Solution guide</div>
+          <div id="solveSummary">Ready</div>
+        </div>
+        <button id="btnCloseSolve" type="button">Close</button>
+      </div>
+
+      <div class="solveNowRow">
+        <div class="solveReadout">
+          <span class="label">Now</span>
+          <strong id="solveNow">—</strong>
+        </div>
+        <div class="solveReadout">
+          <span class="label">Next</span>
+          <strong id="solveNext">—</strong>
+        </div>
+        <div id="solveProgressText">0 / 0</div>
+      </div>
+
+      <div class="solveProgressTrack"><div id="solveProgressBar"></div></div>
+      <div id="solveMoves" aria-label="Solution moves"></div>
+
+      <div class="solveActions">
+        <button id="btnSolvePlay" class="primary" type="button">Play</button>
+        <button id="btnSolvePrev" type="button">Prev</button>
+        <button id="btnSolveNext" type="button">Next</button>
+        <button id="btnSolveRestart" type="button">Restart</button>
+        <button id="btnCopySolve" type="button">Copy</button>
+      </div>
+    </section>
+
     <div id="status"></div>
     <div id="win">
       <div class="card">
@@ -1324,7 +1600,15 @@ let solverBusy = false; // solver thinking (worker)
 let suppressWin = false;
 let solveToken = 0;
 
-function inputLocked(){ return solving || solverBusy; }
+let solutionGuide = {
+  tokens:[],
+  index:0,
+  playing:false,
+  busy:false,
+  originalFacelets:'',
+};
+
+function inputLocked(){ return solving || solverBusy || solutionGuide.playing || solutionGuide.busy; }
 function busy(){ return active || layerDrag || viewDrag || viewSnap || queue.length > 0; }
 
 function enqueueMove(m){
@@ -1392,6 +1676,7 @@ function finishMove(){
     movesEl.textContent = moveCount;
     if (move.record) history.push(move.historyEntry || move);
   }
+  if (typeof move.onComplete === 'function') move.onComplete();
   afterMove();
 }
 
@@ -1554,6 +1839,7 @@ function hideWin(){ winEl.classList.remove('show'); }
 
 function doScramble(n=25){
   if (inputLocked() || busy()) return;
+  closeSolutionGuide();
   hideWin(); hideStatus();
   history.length = 0; moveCount = 0; movesEl.textContent = '0';
   resetTimer(); solving = false;
@@ -1582,6 +1868,7 @@ function doUndo(){
 
 function doReset(){
   solveToken++;
+  closeSolutionGuide();
   queue.length = 0;
   active = null;   // buildCube discards the half-animated pivot with the cubies
   solving = false; solverBusy = false; suppressWin = false;
@@ -1648,6 +1935,177 @@ function solveInWorker(faceletsStr){
   });
 }
 
+function inverseToken(token){
+  if(token.includes('2')) return token;
+  return token.includes("'") ? token[0] : token[0] + "'";
+}
+
+function normalizeSolutionTokens(solution){
+  // cubejs already returns compact Singmaster notation. This lightweight pass
+  // removes adjacent same-face redundancies so the guide is easier to read.
+  const out=[];
+  const amount=t=>t.includes('2')?2:t.includes("'")?3:1;
+  const encode=(face,n)=>{
+    n=((n%4)+4)%4;
+    if(n===0) return null;
+    if(n===1) return face;
+    if(n===2) return face+'2';
+    return face+"'";
+  };
+  for(const raw of solution.trim().split(/\s+/)){
+    if(!raw) continue;
+    const token=raw.toUpperCase();
+    const last=out[out.length-1];
+    if(last && last[0]===token[0]){
+      out.pop();
+      const merged=encode(token[0],amount(last)+amount(token));
+      if(merged) out.push(merged);
+    }else out.push(token);
+  }
+  return out;
+}
+
+const solveTray=document.getElementById('solveTray');
+const solveSummary=document.getElementById('solveSummary');
+const solveNowEl=document.getElementById('solveNow');
+const solveNextEl=document.getElementById('solveNext');
+const solveProgressText=document.getElementById('solveProgressText');
+const solveProgressBar=document.getElementById('solveProgressBar');
+const solveMovesEl=document.getElementById('solveMoves');
+const btnSolvePlay=document.getElementById('btnSolvePlay');
+const btnSolvePrev=document.getElementById('btnSolvePrev');
+const btnSolveNext=document.getElementById('btnSolveNext');
+const btnSolveRestart=document.getElementById('btnSolveRestart');
+const btnCopySolve=document.getElementById('btnCopySolve');
+const btnCloseSolve=document.getElementById('btnCloseSolve');
+
+function renderSolutionGuide(){
+  const {tokens,index,playing,busy}=solutionGuide;
+  const total=tokens.length;
+  solveSummary.textContent=total ? total+' move'+(total===1?'':'s')+' to solved' : 'Ready';
+  solveNowEl.textContent=index<total ? tokens[index] : 'Solved';
+  solveNextEl.textContent=index+1<total ? tokens[index+1] : '—';
+  solveProgressText.textContent=Math.min(index,total)+' / '+total;
+  solveProgressBar.style.width=(total ? Math.min(100,index/total*100) : 0)+'%';
+  btnSolvePlay.textContent=playing ? 'Pause' : (index>=total ? 'Replay' : 'Play');
+  btnSolvePrev.disabled=busy || index<=0;
+  btnSolveNext.disabled=busy || index>=total;
+  btnSolveRestart.disabled=busy || index<=0;
+  btnCopySolve.disabled=!total;
+
+  const active=solveMovesEl.children[index];
+  for(let i=0;i<solveMovesEl.children.length;i++){
+    const el=solveMovesEl.children[i];
+    el.classList.toggle('done',i<index);
+    el.classList.toggle('current',i===index);
+  }
+  if(active) active.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+}
+
+function openSolutionGuide(tokens){
+  solutionGuide.tokens=tokens;
+  solutionGuide.index=0;
+  solutionGuide.playing=false;
+  solutionGuide.busy=false;
+  solutionGuide.originalFacelets=facelets();
+  solveMovesEl.replaceChildren();
+  tokens.forEach((token,i)=>{
+    const chip=document.createElement('div');
+    chip.className='solveMove';
+    chip.textContent=token;
+    chip.dataset.index=i;
+    solveMovesEl.appendChild(chip);
+  });
+  solveTray.classList.remove('hidden');
+  renderSolutionGuide();
+}
+
+function closeSolutionGuide(){
+  solutionGuide.playing=false;
+  solutionGuide.busy=false;
+  solving=false;
+  solveTray.classList.add('hidden');
+  renderSolutionGuide();
+}
+
+function runGuideMove(token,direction=1){
+  if(solutionGuide.busy || busy()) return Promise.resolve(false);
+  solutionGuide.busy=true;
+  renderSolutionGuide();
+  const actual=direction>0 ? token : inverseToken(token);
+  return new Promise(resolve=>{
+    const m={...parseMove(actual),duration:430,record:false,count:false};
+    m.onComplete=()=>{
+      solutionGuide.busy=false;
+      renderSolutionGuide();
+      resolve(true);
+    };
+    enqueueMove(m);
+  });
+}
+
+async function stepSolutionForward(){
+  if(solutionGuide.index>=solutionGuide.tokens.length) return false;
+  const token=solutionGuide.tokens[solutionGuide.index];
+  const ok=await runGuideMove(token,1);
+  if(ok){
+    solutionGuide.index++;
+    renderSolutionGuide();
+  }
+  return ok;
+}
+
+async function stepSolutionBack(){
+  if(solutionGuide.index<=0) return false;
+  const token=solutionGuide.tokens[solutionGuide.index-1];
+  const ok=await runGuideMove(token,-1);
+  if(ok){
+    solutionGuide.index--;
+    renderSolutionGuide();
+  }
+  return ok;
+}
+
+async function playSolution(){
+  if(!solutionGuide.tokens.length) return;
+  if(solutionGuide.playing){
+    solutionGuide.playing=false;
+    solving=false;
+    renderSolutionGuide();
+    return;
+  }
+  if(solutionGuide.index>=solutionGuide.tokens.length){
+    // Replay means rewind through the guide first, preserving the actual cube.
+    while(solutionGuide.index>0) await stepSolutionBack();
+  }
+  solutionGuide.playing=true;
+  solving=true;
+  renderSolutionGuide();
+  restartTimer();
+  while(solutionGuide.playing && solutionGuide.index<solutionGuide.tokens.length){
+    const ok=await stepSolutionForward();
+    if(!ok) break;
+  }
+  solutionGuide.playing=false;
+  solving=false;
+  renderSolutionGuide();
+  if(solutionGuide.index>=solutionGuide.tokens.length && isSolved()){
+    stopTimer();
+    showWin('Solution complete.');
+  }
+}
+
+async function restartSolutionGuide(){
+  if(solutionGuide.busy) return;
+  solutionGuide.playing=false;
+  solving=false;
+  while(solutionGuide.index>0){
+    const ok=await stepSolutionBack();
+    if(!ok) break;
+  }
+  renderSolutionGuide();
+}
+
 async function doSolve(){
   if (inputLocked() || busy()) return;
   const token = ++solveToken;
@@ -1655,16 +2113,17 @@ async function doSolve(){
   if (isSolved()){ showStatus('Already solved. Give it a scramble first.'); return; }
   hideWin();
   solverBusy = true;
-  showStatus(solverReady ? 'Solving…' : 'Warming up the solver (one-time setup, a few seconds)…', true);
+  showStatus(solverReady ? 'Finding a solution…' : 'Preparing the solver…', true);
   const sol = await solveInWorker(s);
-  if (token !== solveToken) return;   // user hit reset meanwhile
+  if (token !== solveToken) return;
   solverBusy = false;
-  if (!sol || !sol.trim()){ showStatus('The solver came up empty. Try again.'); return; }
-  const tokens = sol.trim().split(/\s+/);
-  showStatus('Solution · ' + tokens.length + ' moves: ' + sol, true);
-  solving = true;
-  restartTimer();
-  for (const t of tokens) enqueueMove({ ...parseMove(t), duration:460, record:false });
+  if (!sol || !sol.trim()){
+    showStatus('No solution returned. Try again.');
+    return;
+  }
+  const tokens=normalizeSolutionTokens(sol);
+  hideStatus();
+  openSolutionGuide(tokens);
 }
 
 /* --------------------------------- UI -------------------------------------- */
@@ -1674,6 +2133,21 @@ document.getElementById('btnSolve').addEventListener('click', () => doSolve());
 document.getElementById('btnUndo').addEventListener('click', () => doUndo());
 document.getElementById('btnReset').addEventListener('click', () => doReset());
 document.getElementById('winScramble').addEventListener('click', () => doScramble());
+btnCloseSolve.addEventListener('click',closeSolutionGuide);
+btnSolvePlay.addEventListener('click',()=>playSolution());
+btnSolveNext.addEventListener('click',()=>stepSolutionForward());
+btnSolvePrev.addEventListener('click',()=>stepSolutionBack());
+btnSolveRestart.addEventListener('click',()=>restartSolutionGuide());
+btnCopySolve.addEventListener('click',async()=>{
+  const text=solutionGuide.tokens.join(' ');
+  if(!text) return;
+  try{
+    await navigator.clipboard.writeText(text);
+    showStatus('Solution copied.');
+  }catch(err){
+    showStatus(text,true);
+  }
+});
 
 const pad = document.getElementById('movepad');
 for (const row of [['R','L','U','D','F','B'], ["R'","L'","U'","D'","F'","B'"]]){
@@ -1708,7 +2182,6 @@ window.addEventListener('keydown', e => {
 const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff1744', L:'#ff5800' };
 
 const orbitPanel = document.getElementById('orbitPanel');
-const workspace = document.getElementById('workspace');
 const orbitCanvas = document.getElementById('orbit');
 const otx = orbitCanvas.getContext('2d');
 // Drag to pan the orbit diagram
@@ -1992,7 +2465,6 @@ btnOrbit.addEventListener('click', () => {
   orbitOn = !orbitOn;
   btnOrbit.setAttribute('aria-pressed', String(orbitOn));
   orbitPanel.classList.toggle('hidden', !orbitOn);
-  workspace.classList.toggle('orbit-hidden', !orbitOn);
   requestAnimationFrame(() => {
     resize();
     if (orbitOn){
