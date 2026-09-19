@@ -106,9 +106,9 @@
   }
   /* Orbit diagram: floats over the stage, synced with the cube. */
   #orbitPanel{
-    position:absolute; right:10px; bottom:10px; width:420px; z-index:5;
-    background:rgba(255,253,248,.93); border:1px solid var(--line); border-radius:14px;
-    box-shadow:0 8px 24px rgba(35,32,26,.14); padding:8px 10px 6px;
+    position:absolute; right:14px; bottom:12px; width:min(44vw,500px); z-index:5;
+    background:rgba(255,253,248,.82); border:1px solid rgba(226,217,196,.65); border-radius:18px;
+    box-shadow:0 8px 28px rgba(35,32,26,.08); padding:8px 10px 6px;
     transition:opacity .25s, transform .25s;
   }
   #orbitPanel.hidden{ opacity:0; transform:translateY(10px); pointer-events:none; }
@@ -445,7 +445,7 @@ function computeTurn(dx, dy){
 function decideTurn(dx, dy){
   const t = computeTurn(dx, dy);
   if (!t) return;
-  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:280, record:true});
+  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:520, record:true});
   noteActivity();
 }
 // Start a slow-drag: create pivot, attach cubies, track drag
@@ -491,22 +491,44 @@ function sharedCircle(a, b){
 
 function orbitArc(oldSlot, newSlot){
   const circle = sharedCircle(oldSlot, newSlot);
-  if (!circle) return null;
-  const a0 = Math.atan2(oldSlot.y-circle.y, oldSlot.x-circle.x);
-  const a1 = Math.atan2(newSlot.y-circle.y, newSlot.x-circle.x);
-  let da = a1-a0;
-  while (da > Math.PI) da -= Math.PI*2;
-  while (da < -Math.PI) da += Math.PI*2;
-  return {cx:circle.x, cy:circle.y, r:circle.r, a0, da};
+  if (circle){
+    const a0 = Math.atan2(oldSlot.y-circle.y, oldSlot.x-circle.x);
+    const a1 = Math.atan2(newSlot.y-circle.y, newSlot.x-circle.x);
+    let da = a1-a0;
+    while (da > Math.PI) da -= Math.PI*2;
+    while (da < -Math.PI) da += Math.PI*2;
+    return {kind:'circle', cx:circle.x, cy:circle.y, r:circle.r, a0, da};
+  }
+
+  // Face turns also rotate the 3x3 face cluster itself. Those eight face
+  // stickers do not necessarily share one of the nine drawn axis circles.
+  // Give them a true curved sweep instead of a straight chord. The curve is
+  // tangent-like at both ends and lands exactly on the destination node.
+  const dx=newSlot.x-oldSlot.x, dy=newSlot.y-oldSlot.y;
+  const d=Math.max(1,Math.hypot(dx,dy));
+  const nx=-dy/d, ny=dx/d;
+  const bend=Math.min(d*.42, getOrbitGeometry().S*.075);
+  return {
+    kind:'bezier',
+    x0:oldSlot.x,y0:oldSlot.y,x1:newSlot.x,y1:newSlot.y,
+    cx:(oldSlot.x+newSlot.x)/2+nx*bend,
+    cy:(oldSlot.y+newSlot.y)/2+ny*bend
+  };
 }
 
 function orbitPoint(m, t){
-  if (m.arc){
-    const a = m.arc.a0 + m.arc.da*t;
-    return {x:m.arc.cx + Math.cos(a)*m.arc.r, y:m.arc.cy + Math.sin(a)*m.arc.r};
+  t=Math.max(-1,Math.min(1,t));
+  if (!m.arc) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
+  if (m.arc.kind==='circle'){
+    const a=m.arc.a0+m.arc.da*t;
+    return {x:m.arc.cx+Math.cos(a)*m.arc.r,y:m.arc.cy+Math.sin(a)*m.arc.r};
   }
-  // Safety fallback only for malformed geometry. Normal Rubik generators share a track.
-  return {x:m.oldX + (m.newX-m.oldX)*t, y:m.oldY + (m.newY-m.oldY)*t};
+  // Quadratic Bezier. Negative t is used while a manual drag is reversed.
+  const u=1-t;
+  return {
+    x:u*u*m.arc.x0+2*u*t*m.arc.cx+t*t*m.arc.x1,
+    y:u*u*m.arc.y0+2*u*t*m.arc.cy+t*t*m.arc.y1
+  };
 }
 
 // Build an exact physical-sticker movement map. No color matching and no greedy
@@ -560,19 +582,19 @@ function finishLayerDrag(){
   if (actualTurns === 0){
     const dragOrbitMap = layerDrag.dotMap;
     const startAngle = layerDrag.visualAngle ?? currentAngle ?? 0;
-    active = {pivot, cubies, axis, angle:0, t:0, dur:0.20,
-              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:200, record:false},
+    active = {pivot, cubies, axis, angle:0, t:0, dur:0.34,
+              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:340, record:false},
               fromAngle:startAngle, isDragFinish:true, isCancelledDrag:true,
               orbitMap:dragOrbitMap, orbitStartAngle:startAngle};
     layerDrag = null;
     return;
   }
   // Animate from current to target, then finish as a move
-  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:260, record:true};
+  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:420, record:true};
   // Set up as an active move starting from current angle
   const startAngle = currentAngle || 0;
   const dragOrbitMap = layerDrag.dotMap;
-  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.26, move,
+  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.42, move,
             fromAngle:startAngle, isDragFinish:true, orbitMap:dragOrbitMap, orbitStartAngle:startAngle};
   layerDrag = null;
   noteActivity();
@@ -676,7 +698,7 @@ function afterMove(){
   }
 }
 
-const easeInOut = k => k*k*(3 - 2*k); // smoothstep: soft acceleration/deceleration without cubic jerk
+const easeInOut = k => 0.5 - 0.5*Math.cos(Math.PI*k); // cosine ease: continuous velocity, reference-like sweep
 
 /* ------------------------------ cube state --------------------------------- */
 
@@ -1168,7 +1190,7 @@ function drawOrbit(){
   otx.clearRect(0, 0, S, S);
   
   // Draw the 9 circles (with pan offset)
-  otx.strokeStyle = 'rgba(120,120,120,0.45)';
+  otx.strokeStyle = 'rgba(70,70,70,0.42)';
   otx.lineWidth = Math.max(1, S*0.003);
   for (const c of circles){
     otx.beginPath();
@@ -1181,7 +1203,7 @@ function drawOrbit(){
   try { state = facelets(); } catch(e) { state = null; }
   
   // Sliding dots: 54 dots with fixed colors move between slots
-  const dotR = Math.max(4, S*0.022);
+  const dotR = Math.max(4, S*0.019);
   const slotMap = getOrbitSlotMap();
   
   // Initialize dots in solved positions (first run)
@@ -1291,7 +1313,7 @@ function loop(now){
     if (layerDrag.visualAngle === undefined) layerDrag.visualAngle = layerDrag.currentAngle || 0;
     const target = layerDrag.targetAngle ?? layerDrag.currentAngle ?? 0;
     // Exponential damping is frame-rate independent and removes touch/pointer stepping.
-    const follow = 1 - Math.exp(-dt * 24);
+    const follow = 1 - Math.exp(-dt * 18);
     layerDrag.visualAngle += (target - layerDrag.visualAngle) * follow;
     layerDrag.pivot.rotation[layerDrag.axis] = layerDrag.visualAngle;
   }
@@ -1340,7 +1362,7 @@ window.__cube = {
     for (const t of notation.trim().split(/\s+/)){
       if (!t) continue;
       const m = { ...parseMove(t), record:true };
-      if (instant) applyInstant(m); else queue.push({ ...m, duration:280 });
+      if (instant) applyInstant(m); else queue.push({ ...m, duration:520 });
     }
     moveCount += 0;
   },
@@ -1348,7 +1370,7 @@ window.__cube = {
   orbit: () => ({
     on:orbitOn,
     dots:orbitDots ? orbitDots.length : 0,
-    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({arc:!!m.arc}))
+    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.arc?.kind || 'line'}))
   }),
   orbitDotCount(){
     let n = 0;
