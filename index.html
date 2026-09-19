@@ -551,8 +551,8 @@ function updateLayerDrag(curX, curY){
   // Project drag onto the turn direction
   const dist = dx*layerDrag.dirX + dy*layerDrag.dirY;
   // 140px drag = 90 degrees (tunable)
-  const raw = layerDrag.dir * (dist / 155) * (Math.PI/2);
-  const angle = Math.max(-Math.PI/2, Math.min(Math.PI/2, raw));
+  const progress = Math.max(0, Math.min(1, dist / 155));
+  const angle = layerDrag.dir * progress * (Math.PI/2);
   // Pointer input can arrive unevenly, especially on touch. Smooth the visual
   // timeline while keeping it responsive enough to scrub backwards.
   layerDrag.targetAngle = angle;
@@ -583,7 +583,7 @@ function finishLayerDrag(){
   const startAngle = layerDrag.visualAngle ?? currentAngle ?? 0;
   const remaining=Math.abs(targetAngle-startAngle)/(Math.PI/2);
   const finishDur=Math.max(0.10,0.50*Math.min(1,remaining));
-  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:finishDur*1000, record:true};
+  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns), turns:actualTurns, duration:finishDur*1000, record:true};
   // Continue from the exact angle already visible on screen.
   const dragOrbitMap = layerDrag.dotMap;
   active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:finishDur, move,
@@ -630,7 +630,7 @@ function startMove(m){
   active = savedActive;
   const orbitMap = buildDragDotMap(oldIds, newIds, m);
 
-  active = { pivot, cubies, axis:m.axis, angle, t:0, dur:(m.duration || 190)/1000, move:m,
+  active = { pivot, cubies, axis:m.axis, angle, t:0, dur:(m.duration || 500)/1000, move:m,
              orbitMap, orbitStartAngle:0 };
 }
 
@@ -1342,6 +1342,27 @@ window.__cube = {
     activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.path?.kind || 'line'})),
     pathCounts:(layerDrag?.dotMap || active?.orbitMap || []).reduce((a,m)=>{const k=m.path?.kind||'line';a[k]=(a[k]||0)+1;return a;},{})
   }),
+  validateOrbit(){
+    if (!orbitDots || orbitDots.length !== 54) return {ok:false, reason:'orbit not initialized'};
+    const oldIds=faceletStickerIds();
+    const out={};
+    const savedActive=active;
+    for (const [name,m0] of Object.entries(MOVES)){
+      const cubies=[];
+      for (const c of cubeGroup.children){
+        if (c.userData.pos && Math.round(c.userData.pos[m0.axis])===m0.layer) cubies.push(c);
+      }
+      const m={...m0,turns:1};
+      active={axis:m.axis,angle:m.dir*Math.PI/2,cubies};
+      const newIds=faceletStickerIds();
+      active=savedActive;
+      const paths=buildDragDotMap(oldIds,newIds,m) || [];
+      const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
+      out[name]={moving:paths.length,paths:counts};
+    }
+    active=savedActive;
+    return {ok:Object.values(out).every(x=>x.moving===20 && x.paths.polar===20),moves:out};
+  },
   orbitDotCount(){
     let n = 0;
     for (const c of cubeGroup.children) if (c.userData.pos) n += c.userData.stickers.length;
