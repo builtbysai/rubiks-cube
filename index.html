@@ -106,7 +106,7 @@
   }
   /* Orbit diagram: floats over the stage, synced with the cube. */
   #orbitPanel{
-    position:absolute; right:10px; bottom:10px; width:252px; z-index:5;
+    position:absolute; right:10px; bottom:10px; width:420px; z-index:5;
     background:rgba(255,253,248,.93); border:1px solid var(--line); border-radius:14px;
     box-shadow:0 8px 24px rgba(35,32,26,.14); padding:8px 10px 6px;
     transition:opacity .25s, transform .25s;
@@ -764,7 +764,7 @@ window.addEventListener('keydown', e => {
 // to three centers in a triangle; the dots ride on rings around them and move
 // exactly as the 3D stickers do, including mid-animation.
 
-const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#009b48', B:'#0046ad', R:'#b71234', L:'#ff5800' };
+const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff1744', L:'#ff00ff' };
 
 const orbitPanel = document.getElementById('orbitPanel');
 const orbitCanvas = document.getElementById('orbit');
@@ -803,7 +803,7 @@ function sizeOrbitCanvas(){
 // distances, clustered, keeping the ones shared by several stickers.
 let orbitRings = null;
 function computeOrbitRings(){
-  const S = 232, cx = S/2, cy = S/2, k = S*0.195;
+  const S = 320, cx = S/2, cy = S/2, k = S*0.14;
   const pts = [];
   for (const f of FACES){
     const n = f.n, u = f.u, r = f.r;
@@ -840,7 +840,7 @@ const _pq = new THREE.Quaternion();
 function drawOrbit(){
   if (!orbitOn) return;
   const S = orbitSize();
-  const cx = S/2, cy = S/2, k = S*0.195;
+  const cx = S/2, cy = S/2, k = S*0.14;
   const centers = [
     orbitProject(1.5, 0, 0, cx, cy, k),
     orbitProject(0, 1.5, 0, cx, cy, k),
@@ -849,9 +849,9 @@ function drawOrbit(){
   otx.clearRect(0, 0, S, S);
 
   if (!orbitRings) computeOrbitRings();
-  const sc = S/232;
-  otx.lineWidth = 1;
-  otx.strokeStyle = 'rgba(105,94,74,0.50)';
+  const sc = S/320;
+  otx.lineWidth = 0.8;
+  otx.strokeStyle = 'rgba(120,120,120,0.35)';
   for (let i=0; i<3; i++){
     for (const r of orbitRings[i]){
       otx.beginPath();
@@ -872,7 +872,7 @@ function drawOrbit(){
     _axisV.set(0,0,0); _axisV[active.axis] = 1;
     pq = _pq.setFromAxisAngle(_axisV, active.angle*easeInOut(t));
   }
-  const dotR = Math.max(2.6, S*0.020);
+  const dotR = Math.max(3.2, S*0.024);
   for (const c of cubeGroup.children){
     if (!c.userData.pos) continue; // pivot
     if (inFlight && inFlight.has(c)){
@@ -887,7 +887,7 @@ function drawOrbit(){
       const p = orbitProject(_op.x + _od.x*0.5, _op.y + _od.y*0.5, _op.z + _od.z*0.5, cx, cy, k);
       otx.fillStyle = ORBIT_CSS[st.userData.home];
       otx.strokeStyle = 'rgba(35,32,26,0.55)';
-      otx.lineWidth = 1;
+      otx.lineWidth = 0.8;
       otx.beginPath();
       otx.arc(p[0], p[1], dotR, 0, Math.PI*2);
       otx.fill();
@@ -904,7 +904,7 @@ function drawOrbit(){
         const p = orbitProject(_op.x + _od.x*0.5, _op.y + _od.y*0.5, _op.z + _od.z*0.5, cx, cy, k);
         otx.fillStyle = ORBIT_CSS[st.userData.home];
         otx.strokeStyle = 'rgba(35,32,26,0.55)';
-        otx.lineWidth = 1;
+        otx.lineWidth = 0.8;
         otx.beginPath();
         otx.arc(p[0], p[1], dotR, 0, Math.PI*2);
         otx.fill();
