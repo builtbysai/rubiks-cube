@@ -108,4 +108,32 @@ for(const [name,m] of Object.entries(MOVES)){
   }
 }
 
-console.log('orbit reference model: OK (54 nodes, 20 moving stickers per quarter turn, all six moves roundtrip)');
+// Whole-cube face-to-face rotations use the same orbit nodes, but rotate
+// every sticker rather than one layer. Two axis-center stickers stay fixed;
+// the other 52 must move continuously to another valid node.
+for(const axis of ['x','y','z']){
+  for(const dir of [-1,1]){
+    const ss=stickers();
+    let moved=0;
+    for(const s of ss){
+      const before=nodeFor(s.p,s.n,g);
+      const p=rotate(s.p,axis,dir);
+      const n=rotate(s.n,axis,dir);
+      const after=nodeFor(p,n,g);
+      if(dist(before,after)>.001) moved++;
+    }
+    assert.equal(moved,52,`whole-cube ${axis} ${dir} should move 52 sticker positions`);
+
+    let state=stickers();
+    for(let q=0;q<4;q++){
+      state=state.map(s=>({...s,p:rotate(s.p,axis,dir),n:rotate(s.n,axis,dir)}));
+    }
+    for(const s of state){
+      const original=stickers()[s.id];
+      assert.deepEqual(s.p,original.p,`whole-cube ${axis} ${dir} position roundtrip`);
+      assert.deepEqual(s.n,original.n,`whole-cube ${axis} ${dir} normal roundtrip`);
+    }
+  }
+}
+
+console.log('orbit reference model: OK (54 nodes, face turns=20 moving stickers, view turns=52, all quarter-turn roundtrips)');
