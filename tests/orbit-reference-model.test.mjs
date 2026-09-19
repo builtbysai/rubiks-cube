@@ -111,6 +111,9 @@ for(const [name,m] of Object.entries(MOVES)){
 // Whole-cube face-to-face rotations use the same orbit nodes, but rotate
 // every sticker rather than one layer. Two axis-center stickers stay fixed;
 // the other 52 must move continuously to another valid node.
+// Every moving point must also preserve one of the three radii belonging to
+// the active rotation-axis circle family.
+
 for(const axis of ['x','y','z']){
   for(const dir of [-1,1]){
     const ss=stickers();
@@ -120,7 +123,18 @@ for(const axis of ['x','y','z']){
       const p=rotate(s.p,axis,dir);
       const n=rotate(s.n,axis,dir);
       const after=nodeFor(p,n,g);
-      if(dist(before,after)>.001) moved++;
+      if(dist(before,after)>.001){
+        moved++;
+        const family=FAMILY[axis];
+        const center=g.centers[family];
+        const r0=Math.hypot(before.x-center[0],before.y-center[1]);
+        const r1=Math.hypot(after.x-center[0],after.y-center[1]);
+        const nearest0=Math.min(...g.radii.map(r=>Math.abs(r-r0)));
+        const nearest1=Math.min(...g.radii.map(r=>Math.abs(r-r1)));
+        assert.ok(nearest0<1e-6,`whole-cube ${axis} start point must lie on a circle track`);
+        assert.ok(nearest1<1e-6,`whole-cube ${axis} end point must lie on a circle track`);
+        assert.ok(Math.abs(r0-r1)<1e-6,`whole-cube ${axis} point must preserve circle radius`);
+      }
     }
     assert.equal(moved,52,`whole-cube ${axis} ${dir} should move 52 sticker positions`);
 
