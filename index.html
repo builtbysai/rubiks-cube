@@ -180,7 +180,7 @@
   </div>
   <div id="movepad"></div>
   <div class="hint">
-    Drag a sticker to turn that layer &middot; drag the background to orbit &middot; scroll or pinch to zoom<br>
+    Drag a sticker to turn that layer &middot; drag the background to rotate face-to-face &middot; scroll or pinch to zoom<br>
     Keys <kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd> turn faces, hold <kbd>Shift</kbd> for counter-clockwise
   </div>
 </footer>
@@ -1529,7 +1529,7 @@ function loop(now){
 
 resize();
 sizeOrbitCanvas();
-showStatus('Drag a sticker to turn a layer.');
+showStatus('Drag a sticker to turn a layer. Drag the background to change faces.');
 requestAnimationFrame(loop);
 
 /* ------------------------------- debug API --------------------------------- */
