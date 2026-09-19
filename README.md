@@ -12,9 +12,11 @@ Live: https://builtbysai.com/rubiks-cube/
   bodies and the familiar white, yellow, green, blue, red, and orange faces.
 - **Turn layers by dragging.** Grab any sticker and drag: the layer follows
   your gesture, with smooth animated quarter turns.
-- **Orbit, zoom, keyboard.** Drag the background to orbit, scroll or pinch to
-  zoom. Keys `R L U D F B` turn faces; hold `Shift` for counter-clockwise.
-  An on-screen move pad covers all 12 basic turns.
+- **Face-to-face view rotation, zoom, keyboard.** Drag the background to rotate
+  the whole cube from one face orientation to the next. The 2D orbit projection
+  reorients all 54 physical stickers at the same progress as the 3D cube.
+  Scroll or pinch to zoom. Keys `R L U D F B` turn faces; hold `Shift` for
+  counter-clockwise.
 - **Scramble, undo, reset.** 25-move animated scrambles, full move history
   with undo, and instant reset.
 - **A real solver.** The Solve button runs Herbert Kociemba's two-phase
@@ -43,10 +45,12 @@ model you see and the model being solved can never disagree.
 
 The orbit view is not a second cube state. It is a projection of those same
 54 physical sticker identities. Its static geometry and turn timing were
-measured against the supplied reference video: Y is the upper circle family,
-X the lower-left family, and Z the lower-right family. A cosine-eased move
-timeline drives both renderers together, so there is no post-turn catch-up or
-nearest-color reassignment.
+measured against the supplied reference video. The three circle families stay
+fixed as the coordinate frame while sticker points move through them. Face
+turns move the affected 20 stickers. Whole-cube face-to-face rotations remap
+the complete projection, moving 52 sticker positions while the two stickers on
+the rotation axis remain fixed. Both the 3D transform and 2D projection read
+the same live angle, including partial drags and snap completion.
 
 ## Model check
 
