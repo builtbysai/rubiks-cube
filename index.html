@@ -2521,19 +2521,20 @@ async function doSolve(){
   hideWin();
   solverBusy = true;
   const solveButton=document.getElementById('btnSolve');
+  const solveButtonLabel=solveButton.querySelector('span');
   solveButton.disabled=true;
-  solveButton.textContent='Solving…';
+  if(solveButtonLabel) solveButtonLabel.textContent='Solving…';
   showStatus(solverReady ? 'Finding a solution…' : 'Preparing the solver…', true);
   const sol = await solveInWorker(s);
   if (token !== solveToken){
     solverBusy=false;
     solveButton.disabled=false;
-    solveButton.textContent='Solve';
+    if(solveButtonLabel) solveButtonLabel.textContent='Solve';
     return;
   }
   solverBusy = false;
   solveButton.disabled=false;
-  solveButton.textContent='Solve';
+  if(solveButtonLabel) solveButtonLabel.textContent='Solve';
   if (!sol || !sol.trim()){
     showStatus('No solution returned. Try again.');
     return;
