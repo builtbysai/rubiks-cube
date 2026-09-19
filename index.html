@@ -728,14 +728,33 @@ function buildRadialPath(raw){
   };
 }
 
-function buildWholeViewPath(raw,direction){
+function nearestOrbitRadius(r,radii){
+  let best=radii[0], bestErr=Math.abs(r-radii[0]);
+  for(let i=1;i<radii.length;i++){
+    const err=Math.abs(r-radii[i]);
+    if(err<bestErr){best=radii[i];bestErr=err;}
+  }
+  return {radius:best,error:bestErr};
+}
+
+function buildWholeViewPath(raw,direction,radii){
+  const startRing=nearestOrbitRadius(raw.r0,radii);
+  const endRing=nearestOrbitRadius(raw.r1,radii);
+
+  // Whole-cube rotation preserves the coordinate along the active axis.
+  // Therefore every moving point stays on ONE of that axis family's three
+  // concentric circles for the entire transition.
+  const radius=startRing.radius;
   return {
-    kind:'view',
+    kind:'viewTrack',
     cx:raw.center[0],cy:raw.center[1],
-    r0:raw.r0,r1:raw.r1,
+    r:radius,
     a0:raw.a0,
     da:directedAngleDelta(raw.a0,raw.a1,direction),
-    direction
+    direction,
+    startRadiusError:startRing.error,
+    endRadiusError:Math.abs(raw.r1-radius),
+    ringConsistent:Math.abs(endRing.radius-radius)<1e-6
   };
 }
 
@@ -744,14 +763,14 @@ function orbitPoint(m,t){
   const p=m.path;
   if(!p) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
 
-  if(p.kind==='track'){
+  if(p.kind==='track' || p.kind==='viewTrack'){
     // Radius is intentionally immutable. These dots are mathematically locked
-    // to the centerline of the rendered gray circle for the entire drag.
+    // to the centerline of the rendered gray circle for the entire motion.
     const a=p.a0+p.da*t;
     return {x:p.cx+Math.cos(a)*p.r,y:p.cy+Math.sin(a)*p.r};
   }
 
-  if(p.kind==='radial' || p.kind==='view'){
+  if(p.kind==='radial'){
     const r=p.r0+(p.r1-p.r0)*t;
     const a=p.a0+p.da*t;
     return {x:p.cx+Math.cos(a)*r,y:p.cy+Math.sin(a)*r};
@@ -802,7 +821,7 @@ function buildDragDotMap(oldIds,newIds,move){
       dot:p.dot,
       oldX:p.oldSlot.x,oldY:p.oldSlot.y,
       newX:p.newSlot.x,newY:p.newSlot.y,
-      path:buildWholeViewPath(p,direction)
+      path:buildWholeViewPath(p,direction,g.radii)
     }));
   }
 
@@ -1717,7 +1736,7 @@ window.__cube = {
       const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
       const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
       const directions=[...new Set(
-        paths.filter(p=>p.path?.kind==='track' || p.path?.kind==='view')
+        paths.filter(p=>p.path?.kind==='track' || p.path?.kind==='viewTrack')
           .map(p=>Math.sign(p.path?.da||0)).filter(Boolean)
       )];
       out[name]={
@@ -1751,15 +1770,23 @@ window.__cube = {
         const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
         const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
         const directions=[...new Set(paths.map(p=>Math.sign(p.path?.da||0)).filter(Boolean))];
+        const maxRadiusError=paths.reduce((mx,p)=>Math.max(
+          mx,
+          p.path?.startRadiusError || 0,
+          p.path?.endRadiusError || 0
+        ),0);
+        const ringsConsistent=paths.every(p=>p.path?.ringConsistent!==false);
         out[visualAxis+(desiredDir>0?'+':'-')]={
           moving:paths.length,paths:counts,
-          orbitDirections:directions,directionCoherent:directions.length<=1
+          orbitDirections:directions,directionCoherent:directions.length<=1,
+          maxRadiusError,ringsConsistent
         };
       }
     }
     return {
       ok:Object.values(out).every(x=>
-        x.moving===52 && x.paths.view===52 && x.directionCoherent
+        x.moving===52 && x.paths.viewTrack===52 && x.directionCoherent &&
+        x.ringsConsistent && x.maxRadiusError<0.05
       ),
       turns:out
     };
