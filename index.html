@@ -872,7 +872,8 @@ function afterMove(){
   }
 }
 
-const easeInOut = k => 0.5 - 0.5*Math.cos(Math.PI*k); // cosine ease: continuous velocity, reference-like sweep
+const easeInOut = k => 0.5 - 0.5*Math.cos(Math.PI*k); // reference-like scripted sweep
+const easeOutCubic = k => 1 - Math.pow(1-k,3);         // tactile release: no dead stop before completion
 
 /* ------------------------------ cube state --------------------------------- */
 
@@ -1476,7 +1477,7 @@ function loop(now){
     viewSnap.t += dt;
     const k=Math.min(1,viewSnap.t/viewSnap.dur);
     viewSnap.displayAngle=viewSnap.startAngle+
-      (viewSnap.targetAngle-viewSnap.startAngle)*easeInOut(k);
+      (viewSnap.targetAngle-viewSnap.startAngle)*easeOutCubic(k);
     if(k>=1){
       if(viewSnap.commit){
         viewOrientationQ.copy(viewSnap.targetQ);
@@ -1510,7 +1511,7 @@ function loop(now){
     active.t += dt;
     const k = Math.min(1, active.t / active.dur);
     // For drag-finish, interpolate from fromAngle to angle
-    const eased = easeInOut(k);
+    const eased = active.isDragFinish ? easeOutCubic(k) : easeInOut(k);
     let displayedAngle;
     if (active.fromAngle !== undefined){
       displayedAngle = active.fromAngle + (active.angle - active.fromAngle) * eased;
