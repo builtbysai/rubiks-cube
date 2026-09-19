@@ -1574,7 +1574,7 @@ window.__cube = {
   },
   validateOrbit(){
     if (!orbitDots || orbitDots.length !== 54) return {ok:false, reason:'orbit not initialized'};
-    const oldIds=faceletStickerIds();
+    const oldIds=orientedStickerIds(faceletStickerIds());
     const out={};
     const savedActive=active;
     for (const [name,m0] of Object.entries(MOVES)){
@@ -1584,14 +1584,37 @@ window.__cube = {
       }
       const m={...m0,turns:1};
       active={axis:m.axis,angle:m.dir*Math.PI/2,cubies};
-      const newIds=faceletStickerIds();
+      const newIds=orientedStickerIds(faceletStickerIds());
       active=savedActive;
-      const paths=buildDragDotMap(oldIds,newIds,m) || [];
+      const visualMove=orientMoveForView(m,viewOrientationQ);
+      const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
       const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
-      out[name]={moving:paths.length,paths:counts};
+      out[name]={moving:paths.length,paths:counts,axis:visualMove.axis,dir:visualMove.dir};
     }
     active=savedActive;
     return {ok:Object.values(out).every(x=>x.moving===20 && x.paths.polar===20),moves:out};
+  },
+  validateView(){
+    if (!orbitDots || orbitDots.length !== 54) return {ok:false, reason:'orbit not initialized'};
+    const oldIds=orientedStickerIds(faceletStickerIds());
+    const out={};
+    for (const visualAxis of ['x','y']){
+      for (const desiredDir of [-1,1]){
+        const local=localAxisForVisualAxis(visualAxis,desiredDir);
+        axisQuaternion(local.axis,local.dir*Math.PI/2,_stepViewQ);
+        const targetQ=viewOrientationQ.clone().multiply(_stepViewQ);
+        const targetPerm=buildViewSlotPermutation(targetQ);
+        const newIds=orientedStickerIds(faceletStickerIds(),targetPerm);
+        const visualMove=orientMoveForView(
+          {axis:local.axis,dir:local.dir,turns:1,whole:true},
+          viewOrientationQ
+        );
+        const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
+        const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
+        out[visualAxis+(desiredDir>0?'+':'-')]={moving:paths.length,paths:counts};
+      }
+    }
+    return {ok:Object.values(out).every(x=>x.moving===52 && x.paths.polar===52),turns:out};
   },
   orbitDotCount(){
     let n = 0;
