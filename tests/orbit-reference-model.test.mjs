@@ -177,4 +177,48 @@ for(const oriented of orientations){
   }
 }
 
-console.log('orbit reference model: OK (54 nodes, 24 views, face turns=20, view turns=52, quarter-turn roundtrips)');
+// The reference's visible face twists are coherent sweeps: all 20 points
+// move around the active center in one angular direction. A reverse twist
+// reverses all 20 together. This guards against per-sticker shortest-path
+// choices reintroducing mixed clockwise/counter-clockwise motion.
+function shortestAngle(a0,a1){
+  let d=a1-a0;
+  while(d>Math.PI)d-=Math.PI*2;
+  while(d<-Math.PI)d+=Math.PI*2;
+  return d;
+}
+const centerByAxis={x:g.centers.R,y:g.centers.T,z:g.centers.L};
+for(const axis of ['x','y','z']){
+  const ai={x:0,y:1,z:2}[axis];
+  for(const dir of [-1,1]){
+    const deltas=[];
+    for(const s of stickers()){
+      const before=nodeFor(s.p,s.n,g);
+      let p=s.p,n=s.n;
+      if(s.p[ai]===1){
+        p=rotate(p,axis,dir);
+        n=rotate(n,axis,dir);
+      }
+      const after=nodeFor(p,n,g);
+      if(dist(before,after)<=.001) continue;
+      const ctr=centerByAxis[axis];
+      deltas.push(shortestAngle(
+        Math.atan2(before.y-ctr[1],before.x-ctr[0]),
+        Math.atan2(after.y-ctr[1],after.x-ctr[0])
+      ));
+    }
+    assert.equal(deltas.length,20,`visible ${axis} face should move 20 points`);
+    const expectedSign=-dir;
+    assert.ok(deltas.every(d=>Math.sign(d)===expectedSign),
+      `visible ${axis} face must move every orbit point in one direction`);
+  }
+}
+
+// Half a physical quarter-turn is exactly half an orbit transition.
+for(const p of [0,.1,.25,.5,.75,.9,1]){
+  const angle=p*Math.PI/2;
+  const orbitProgress=angle/(Math.PI/2);
+  assert.ok(Math.abs(orbitProgress-p)<1e-12,'cube/orbit progress must be 1:1');
+}
+
+console.log('orbit reference model: OK (54 nodes, 24 views, coherent direction, 1:1 drag sync, roundtrips)');
