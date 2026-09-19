@@ -454,7 +454,80 @@ function startLayerDrag(turn, startX, startY){
   }
   for (const ch of cubies) pivot.add(ch);
   layerDrag = {pivot, cubies, axis:turn.axis, layer:turn.layer, dir:turn.dir,
-               startX, startY, dirX:turn.dragDirX, dirY:turn.dragDirY};
+               startX, startY, dirX:turn.dragDirX, dirY:turn.dragDirY, currentAngle:0};
+  // Compute the post-turn state to map dot movements during drag
+  // (Hans: orbit should reflect drag in real time, not just after)
+  try {
+    const oldState = facelets();
+    // Temporarily fake an active move to compute new state
+    const savedActive = active;
+    active = {axis: turn.axis, angle: turn.dir * Math.PI/2, cubies: cubies};
+    const newState = facelets();
+    active = savedActive;
+    layerDrag.oldState = oldState;
+    layerDrag.newState = newState;
+    // Build dot movement map: for each dot, old slot -> new slot
+    layerDrag.dotMap = buildDragDotMap(oldState, newState);
+  } catch (err) {
+    // If mapping fails, fall back to post-drag update only
+    layerDrag.dotMap = null;
+  }
+}
+// Build mapping of dot movements for a drag: matches dots between old and new states
+function buildDragDotMap(oldState, newState){
+  const slotMap = getOrbitSlotMap();
+  if (!slotMap || slotMap.length !== 54 || !orbitDots || orbitDots.length !== 54) return null;
+  // Group slots by color for old and new states
+  const oldByColor = {U:[], D:[], F:[], B:[], R:[], L:[]};
+  const newByColor = {U:[], D:[], F:[], B:[], R:[], L:[]};
+  for (const {slot, globalIdx} of slotMap){
+    const oldC = oldState[globalIdx] || 'U';
+    const newC = newState[globalIdx] || 'U';
+    if (oldByColor[oldC]) oldByColor[oldC].push(slot);
+    if (newByColor[newC]) newByColor[newC].push(slot);
+  }
+  // For each dot, find its old slot (nearest) and new slot (matched)
+  const dotsByColor = {U:[], D:[], F:[], B:[], R:[], L:[]};
+  for (const dot of orbitDots){
+    if (dotsByColor[dot.home]) dotsByColor[dot.home].push(dot);
+  }
+  const map = [];
+  for (const color of ['U','D','F','B','R','L']){
+    const dots = dotsByColor[color];
+    const oldSlots = oldByColor[color];
+    const newSlots = newByColor[color];
+    if (!dots || !oldSlots || !newSlots) continue;
+    if (dots.length !== oldSlots.length || dots.length !== newSlots.length) continue;
+    // Match dots to old slots (by current position)
+    const dotOld = [];
+    const usedOld = new Set();
+    for (const dot of dots){
+      let best = -1, bestD = Infinity;
+      for (let i=0; i<oldSlots.length; i++){
+        if (usedOld.has(i)) continue;
+        const dx = oldSlots[i].x - dot.x, dy = oldSlots[i].y - dot.y;
+        const d = dx*dx + dy*dy;
+        if (d < bestD){ bestD = d; best = i; }
+      }
+      if (best >= 0){ usedOld.add(best); dotOld.push({dot, oldSlot: oldSlots[best]}); }
+    }
+    // Match to new slots (by nearest to old slot)
+    const usedNew = new Set();
+    for (const {dot, oldSlot} of dotOld){
+      let best = -1, bestD = Infinity;
+      for (let i=0; i<newSlots.length; i++){
+        if (usedNew.has(i)) continue;
+        const dx = newSlots[i].x - oldSlot.x, dy = newSlots[i].y - oldSlot.y;
+        const d = dx*dx + dy*dy;
+        if (d < bestD){ bestD = d; best = i; }
+      }
+      if (best >= 0){
+        usedNew.add(best);
+        map.push({dot, oldX: oldSlot.x, oldY: oldSlot.y, newX: newSlots[best].x, newY: newSlots[best].y});
+      }
+    }
+  }
+  return map;
 }
 // Update layer drag from current pointer position
 function updateLayerDrag(curX, curY){
@@ -1078,9 +1151,19 @@ function drawOrbit(){
     }
   }
   
-  // Update targets: for each slot, find which home color is currently there,
-  // then assign dots of that color to those slots (nearest matching)
-  if (state && state.length >= 54){
+  // During a 3D layer drag, dots track the drag fraction directly
+  // (Hans: orbit should show halfway when drag is halfway)
+  if (layerDrag && layerDrag.dotMap){
+    const frac = Math.max(-1, Math.min(1, (layerDrag.currentAngle || 0) / (Math.PI/2)));
+    for (const m of layerDrag.dotMap){
+      // Set position directly (tight tracking, no lerp lag)
+      m.dot.x = m.oldX + (m.newX - m.oldX) * frac;
+      m.dot.y = m.oldY + (m.newY - m.oldY) * frac;
+      m.dot.tx = m.dot.x;
+      m.dot.ty = m.dot.y;
+    }
+    // Draw dots at drag positions (skip normal target update)
+  } else if (state && state.length >= 54){
     // Build list of slots per current color
     const slotsByColor = {U:[], D:[], F:[], B:[], R:[], L:[]};
     for (const {slot, globalIdx} of slotMap){
@@ -1116,13 +1199,17 @@ function drawOrbit(){
   }
   
   // Animate dots toward targets (slide along orbits)
+  // During drag, positions are set directly (no lerp)
+  const inDrag = layerDrag && layerDrag.dotMap;
   const slideSpeed = 0.22;  // higher = faster
   for (const dot of orbitDots){
-    dot.x += (dot.tx - dot.x) * slideSpeed;
-    dot.y += (dot.ty - dot.y) * slideSpeed;
-    // Snap when close
-    if (Math.abs(dot.tx - dot.x) < 0.5) dot.x = dot.tx;
-    if (Math.abs(dot.ty - dot.y) < 0.5) dot.y = dot.ty;
+    if (!inDrag){
+      dot.x += (dot.tx - dot.x) * slideSpeed;
+      dot.y += (dot.ty - dot.y) * slideSpeed;
+      // Snap when close
+      if (Math.abs(dot.tx - dot.x) < 0.5) dot.x = dot.tx;
+      if (Math.abs(dot.ty - dot.y) < 0.5) dot.y = dot.ty;
+    }
     
     otx.fillStyle = ORBIT_CSS[dot.home] || '#888';
     otx.strokeStyle = 'rgba(35,32,26,0.6)';
