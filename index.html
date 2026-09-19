@@ -1662,11 +1662,17 @@ window.__cube = {
       const visualMove=orientMoveForView(m,viewOrientationQ);
       const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
       const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
-      out[name]={moving:paths.length,paths:counts,axis:visualMove.axis,dir:visualMove.dir};
+      const directions=[...new Set(paths.map(p=>Math.sign(p.path?.da||0)).filter(Boolean))];
+      out[name]={
+        moving:paths.length,paths:counts,axis:visualMove.axis,dir:visualMove.dir,
+        orbitDirections:directions,directionCoherent:directions.length<=1
+      };
     }
     active=savedActive;
     return {
-      ok:Object.values(out).every(x=>x.moving===20 && x.paths.polar===20),
+      ok:Object.values(out).every(x=>
+        x.moving===20 && x.paths.polar===20 && x.directionCoherent
+      ),
       moves:out
     };
   },
@@ -1687,10 +1693,19 @@ window.__cube = {
         );
         const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
         const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
-        out[visualAxis+(desiredDir>0?'+':'-')]={moving:paths.length,paths:counts};
+        const directions=[...new Set(paths.map(p=>Math.sign(p.path?.da||0)).filter(Boolean))];
+        out[visualAxis+(desiredDir>0?'+':'-')]={
+          moving:paths.length,paths:counts,
+          orbitDirections:directions,directionCoherent:directions.length<=1
+        };
       }
     }
-    return {ok:Object.values(out).every(x=>x.moving===52 && x.paths.polar===52),turns:out};
+    return {
+      ok:Object.values(out).every(x=>
+        x.moving===52 && x.paths.polar===52 && x.directionCoherent
+      ),
+      turns:out
+    };
   },
   orbitDotCount(){
     let n = 0;
