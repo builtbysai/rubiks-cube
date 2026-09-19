@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rubik's Cube · Interactive 3D</title>
 <style>
   :root{
@@ -1993,11 +1993,14 @@ btnOrbit.addEventListener('click', () => {
   btnOrbit.setAttribute('aria-pressed', String(orbitOn));
   orbitPanel.classList.toggle('hidden', !orbitOn);
   workspace.classList.toggle('orbit-hidden', !orbitOn);
-  if (orbitOn){
-    orbitCache = null; orbitSlotMap = null; orbitDots = null;
-    sizeOrbitCanvas();
-    drawOrbit();
-  }
+  requestAnimationFrame(() => {
+    resize();
+    if (orbitOn){
+      orbitCache = null; orbitSlotMap = null; orbitDots = null;
+      sizeOrbitCanvas();
+      drawOrbit();
+    }
+  });
 });
 
 /* --------------------------------- loop ------------------------------------ */
@@ -2010,13 +2013,18 @@ function fitZoom(){
   return Math.min(22, 10.5 * Math.max(1, 1.26/a));
 }
 function resize(){
-  const w = stage.clientWidth, h = stage.clientHeight;
+  const w = Math.max(1,stage.clientWidth), h = Math.max(1,stage.clientHeight);
   renderer.setSize(w, h, false);
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
   sizeOrbitCanvas();
 }
 window.addEventListener('resize', resize);
+
+// CSS grid changes (especially Orbit show/hide) resize the stage without
+// necessarily firing window.resize. Observe the actual viewport instead.
+const stageResizeObserver = new ResizeObserver(() => resize());
+stageResizeObserver.observe(stage);
 
 function loop(now){
   requestAnimationFrame(loop);
