@@ -847,7 +847,8 @@ function buildOrbitSlots(S){
   return {slots, circles, centers};
 }
 
-let orbitCache = null; orbitSlotMap = null;
+let orbitCache = null;
+let orbitSlotMap = null;
 function getOrbitGeometry(){
   const S = orbitSize();
   if (!orbitCache || Math.abs(orbitCache.S - S) > 1){
@@ -905,7 +906,6 @@ function solvedColorForSlot(slot, S){
 // Map each slot to a (face, idx) in solved state.
 // The 6 (pair, side) groups correspond to 6 faces. Within each group,
 // sort by position to assign idx 0-8.
-let orbitSlotMap = null;
 function getOrbitSlotMap(){
   if (orbitSlotMap) return orbitSlotMap;
   const {slots} = getOrbitGeometry();
