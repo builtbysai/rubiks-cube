@@ -266,9 +266,7 @@ const bodyGeo = new RoundedBoxGeometry(0.96, 0.96, 0.96, 4, 0.07);
 const bodyMat = new THREE.MeshStandardMaterial({ color:0x17171b, roughness:0.35, metalness:0.15 });
 const stickerGeo = new THREE.PlaneGeometry(0.82, 0.82);
 
-let nextStickerId = 0;
 function buildCube(){
-  nextStickerId = 0;
   while (cubeGroup.children.length) {
     const c = cubeGroup.children.pop();
     c.traverse(o => { if (o.isMesh && o.material !== bodyMat) o.material.dispose(); });
@@ -293,7 +291,11 @@ function buildCube(){
       m.lookAt(n[0]*2, n[1]*2, n[2]*2);
       m.userData.dir = new THREE.Vector3(n[0], n[1], n[2]); // home direction (cube space)
       m.userData.home = f.id;
-      m.userData.orbitId = nextStickerId++;
+      // Permanent ID equals this physical sticker's solved URFDLB facelet slot.
+      const fi = FACES.indexOf(f);
+      const row = 1 - (x*f.u[0] + y*f.u[1] + z*f.u[2]);
+      const col = 1 + (x*f.r[0] + y*f.r[1] + z*f.r[2]);
+      m.userData.orbitId = fi*9 + row*3 + col;
       cubie.add(m);
       cubie.userData.stickers.push(m);
     }
@@ -1185,8 +1187,7 @@ function drawOrbit(){
     for (const face of ['U','D','F','B','R','L']){
       for (const slot of byFace[face]){
         const entry = slotMap.find(e => e.slot === slot);
-        const solvedIds = faceletStickerIds();
-        const id = entry ? solvedIds[entry.globalIdx] : orbitDots.length;
+        const id = entry ? entry.globalIdx : orbitDots.length;
         orbitDots.push({id, home: face, x: slot.x, y: slot.y, tx: slot.x, ty: slot.y});
       }
     }
