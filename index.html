@@ -1410,10 +1410,6 @@ function drawOrbit(){
     otx.stroke();
   }
   
-  // Get current cube state (54 chars, each is home face at that position)
-  let state = null;
-  try { state = facelets(); } catch(e) { state = null; }
-  
   // Sliding dots: 54 dots with fixed colors move between slots
   const dotR = Math.max(3.5, S*0.0205);
   const slotMap = getOrbitSlotMap();
@@ -1427,12 +1423,13 @@ function drawOrbit(){
       const face = solvedColorForSlot(slot, S);
       byFace[face].push(slot);
     }
-    // Create 9 dots per face, positioned at the face's slots
+    // Create 9 dots per face, positioned at the face's slots.
+    // Cache slot identity once instead of searching the 54-node map per dot.
+    const indexBySlot=new Map(slotMap.map(e=>[e.slot,e.globalIdx]));
     for (const face of ['U','D','F','B','R','L']){
       for (const slot of byFace[face]){
-        const entry = slotMap.find(e => e.slot === slot);
-        const id = entry ? entry.globalIdx : orbitDots.length;
-        orbitDots.push({id, home: face, x: slot.x, y: slot.y, tx: slot.x, ty: slot.y});
+        const id=indexBySlot.get(slot) ?? orbitDots.length;
+        orbitDots.push({id,home:face,x:slot.x,y:slot.y,tx:slot.x,ty:slot.y});
       }
     }
   }
