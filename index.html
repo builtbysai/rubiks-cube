@@ -1617,8 +1617,13 @@ function enqueueMove(m){
   // interpolation to guess a half-turn path.
   if (m.turns === 2 && !m._quarterPart){
     const historyEntry = { ...m };
-    queue.push({ ...m, turns:1, record:false, count:false, _quarterPart:true });
-    queue.push({ ...m, turns:1, record:!!m.record, count:true, historyEntry, _quarterPart:true });
+    queue.push({
+      ...m, turns:1, record:false, count:false, _quarterPart:true,
+      onComplete:null
+    });
+    queue.push({
+      ...m, turns:1, record:!!m.record, count:true, historyEntry, _quarterPart:true
+    });
     return;
   }
   queue.push(m);
@@ -1694,6 +1699,7 @@ function applyInstant(m){
 }
 
 function afterMove(){
+  if (solutionGuide.playing) return;
   if (suppressWin){
     if (!busy()) suppressWin = false;   // scramble drained
     return;
@@ -1987,6 +1993,7 @@ function renderSolutionGuide(){
   solveNextEl.textContent=index+1<total ? tokens[index+1] : '—';
   solveProgressText.textContent=Math.min(index,total)+' / '+total;
   solveProgressBar.style.width=(total ? Math.min(100,index/total*100) : 0)+'%';
+  solveTray.classList.toggle('complete',total>0 && index>=total);
   btnSolvePlay.textContent=playing ? 'Pause' : (index>=total ? 'Replay' : 'Play');
   btnSolvePrev.disabled=busy || index<=0;
   btnSolveNext.disabled=busy || index>=total;
@@ -2014,6 +2021,20 @@ function openSolutionGuide(tokens){
     chip.className='solveMove';
     chip.textContent=token;
     chip.dataset.index=i;
+    chip.title='Move '+(i+1)+': '+token;
+    chip.addEventListener('click',async()=>{
+      if(solutionGuide.playing || solutionGuide.busy) return;
+      const target=i;
+      while(solutionGuide.index<target){
+        const ok=await stepSolutionForward();
+        if(!ok) break;
+      }
+      while(solutionGuide.index>target){
+        const ok=await stepSolutionBack();
+        if(!ok) break;
+      }
+      renderSolutionGuide();
+    });
     solveMovesEl.appendChild(chip);
   });
   solveTray.classList.remove('hidden');
@@ -2113,10 +2134,20 @@ async function doSolve(){
   if (isSolved()){ showStatus('Already solved. Give it a scramble first.'); return; }
   hideWin();
   solverBusy = true;
+  const solveButton=document.getElementById('btnSolve');
+  solveButton.disabled=true;
+  solveButton.textContent='Solving…';
   showStatus(solverReady ? 'Finding a solution…' : 'Preparing the solver…', true);
   const sol = await solveInWorker(s);
-  if (token !== solveToken) return;
+  if (token !== solveToken){
+    solverBusy=false;
+    solveButton.disabled=false;
+    solveButton.textContent='Solve';
+    return;
+  }
   solverBusy = false;
+  solveButton.disabled=false;
+  solveButton.textContent='Solve';
   if (!sol || !sol.trim()){
     showStatus('No solution returned. Try again.');
     return;
