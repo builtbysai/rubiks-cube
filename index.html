@@ -678,11 +678,6 @@ function shortestAngleDelta(a0,a1){
 }
 
 function orbitDirectionForPaths(rawPaths, move){
-  // Pick ONE direction for the entire move. The reference shows all moving
-  // points sweeping together around the active axis center. We choose the
-  // common direction with the lower total angular travel, which preserves
-  // that behavior without forcing any individual sticker to take a nearly
-  // full revolution just because it crossed the -PI/+PI seam.
   if(move.orbitDirection) return Math.sign(move.orbitDirection) || 1;
   let positiveCost=0, negativeCost=0;
   for(const p of rawPaths){
@@ -706,39 +701,62 @@ function directedAngleDelta(a0,a1,direction){
   return d;
 }
 
-// This is the key behavior in the reference animation.
-// A turn about X/Y/Z is visualized around the matching X/Y/Z circle center.
-// Every affected sticker interpolates in POLAR coordinates around that center:
-// angle sweeps continuously and radius interpolates continuously. Stickers on
-// the adjacent strips have equal start/end radii, so they ride the drawn ring;
-// stickers on the turned face spiral smoothly between rings. No snapping.
-function buildOrbitPath(oldSlot,newSlot,move,direction){
-  const g=getOrbitGeometry();
-  const family=ORBIT_FAMILY_FOR_AXIS[move.axis];
-  const center=g.centers[family];
-  const x0=oldSlot.x-center[0], y0=oldSlot.y-center[1];
-  const x1=newSlot.x-center[0], y1=newSlot.y-center[1];
-  const r0=Math.hypot(x0,y0), r1=Math.hypot(x1,y1);
-  const a0=Math.atan2(y0,x0), a1=Math.atan2(y1,x1);
-  let da=directedAngleDelta(a0,a1,direction);
+// Reference behavior has two distinct face-turn paths:
+// 1) 12 adjacent-strip stickers ride the active gray circle EXACTLY.
+// 2) 8 stickers on the rotating face move through the radial space between
+//    rings while their angle rotates around that same axis center.
+// Keeping these separate prevents track stickers from visibly drifting off the
+// drawn circle while preserving the measured face-perimeter motion.
+function buildTrackPath(raw,direction,activeRadius){
+  return {
+    kind:'track',
+    cx:raw.center[0],cy:raw.center[1],
+    r:activeRadius,
+    a0:raw.a0,
+    da:directedAngleDelta(raw.a0,raw.a1,direction),
+    direction
+  };
+}
 
-  // Half turns are expanded into two visible quarter turns elsewhere, but
-  // keep this deterministic for debug/direct calls too.
-  if(move.turns===2 && Math.abs(Math.abs(da)-Math.PI)<0.18){
-    da=direction*Math.PI;
-  }
-  return {kind:'polar',cx:center[0],cy:center[1],r0,r1,a0,da,direction};
+function buildRadialPath(raw){
+  return {
+    kind:'radial',
+    cx:raw.center[0],cy:raw.center[1],
+    r0:raw.r0,r1:raw.r1,
+    a0:raw.a0,
+    da:shortestAngleDelta(raw.a0,raw.a1)
+  };
+}
+
+function buildWholeViewPath(raw,direction){
+  return {
+    kind:'view',
+    cx:raw.center[0],cy:raw.center[1],
+    r0:raw.r0,r1:raw.r1,
+    a0:raw.a0,
+    da:directedAngleDelta(raw.a0,raw.a1,direction),
+    direction
+  };
 }
 
 function orbitPoint(m,t){
   t=Math.max(0,Math.min(1,t));
   const p=m.path;
   if(!p) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
-  if(p.kind==='polar'){
+
+  if(p.kind==='track'){
+    // Radius is intentionally immutable. These dots are mathematically locked
+    // to the centerline of the rendered gray circle for the entire drag.
+    const a=p.a0+p.da*t;
+    return {x:p.cx+Math.cos(a)*p.r,y:p.cy+Math.sin(a)*p.r};
+  }
+
+  if(p.kind==='radial' || p.kind==='view'){
     const r=p.r0+(p.r1-p.r0)*t;
     const a=p.a0+p.da*t;
     return {x:p.cx+Math.cos(a)*r,y:p.cy+Math.sin(a)*r};
   }
+
   return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
 }
 
@@ -750,6 +768,7 @@ function normalizedTurnProgress(angle,quarterAngle){
 function buildDragDotMap(oldIds,newIds,move){
   const slotMap=getOrbitSlotMap();
   if(!slotMap || slotMap.length!==54 || !orbitDots || orbitDots.length!==54) return null;
+
   const oldSlotById=new Map(), newSlotById=new Map();
   for(const {slot,globalIdx} of slotMap){
     oldSlotById.set(oldIds[globalIdx],slot);
@@ -760,24 +779,59 @@ function buildDragDotMap(oldIds,newIds,move){
   const family=ORBIT_FAMILY_FOR_AXIS[move.axis];
   const center=g.centers[family];
   const raw=[];
+
   for(const dot of orbitDots){
     const oldSlot=oldSlotById.get(dot.id), newSlot=newSlotById.get(dot.id);
     if(!oldSlot || !newSlot) continue;
     if(Math.hypot(oldSlot.x-newSlot.x,oldSlot.y-newSlot.y)<0.01) continue;
+
+    const x0=oldSlot.x-center[0], y0=oldSlot.y-center[1];
+    const x1=newSlot.x-center[0], y1=newSlot.y-center[1];
     raw.push({
-      dot,oldSlot,newSlot,
-      a0:Math.atan2(oldSlot.y-center[1],oldSlot.x-center[0]),
-      a1:Math.atan2(newSlot.y-center[1],newSlot.x-center[0])
+      dot,oldSlot,newSlot,center,
+      r0:Math.hypot(x0,y0),
+      r1:Math.hypot(x1,y1),
+      a0:Math.atan2(y0,x0),
+      a1:Math.atan2(y1,x1)
     });
   }
 
-  const direction=orbitDirectionForPaths(raw,move);
-  return raw.map(p => ({
-    dot:p.dot,
-    oldX:p.oldSlot.x,oldY:p.oldSlot.y,
-    newX:p.newSlot.x,newY:p.newSlot.y,
-    path:buildOrbitPath(p.oldSlot,p.newSlot,{...move,orbitDirection:direction},direction)
-  }));
+  if(move.whole){
+    const direction=orbitDirectionForPaths(raw,move);
+    return raw.map(p => ({
+      dot:p.dot,
+      oldX:p.oldSlot.x,oldY:p.oldSlot.y,
+      newX:p.newSlot.x,newY:p.newSlot.y,
+      path:buildWholeViewPath(p,direction)
+    }));
+  }
+
+  const ringIndex=ORBIT_COORD_TO_RING(move.layer ?? 0);
+  const activeRadius=g.radii[ringIndex];
+  const tolerance=Math.max(0.75,g.S*0.0035);
+
+  // Only the 12 strip stickers are supposed to be constrained to the active
+  // track. Pick their shared sweep direction as a group.
+  const trackRaw=raw.filter(p =>
+    Math.abs(p.r0-activeRadius)<=tolerance &&
+    Math.abs(p.r1-activeRadius)<=tolerance
+  );
+  const trackDirection=orbitDirectionForPaths(trackRaw.length?trackRaw:raw,move);
+
+  return raw.map(p => {
+    const onTrack=
+      Math.abs(p.r0-activeRadius)<=tolerance &&
+      Math.abs(p.r1-activeRadius)<=tolerance;
+
+    return {
+      dot:p.dot,
+      oldX:p.oldSlot.x,oldY:p.oldSlot.y,
+      newX:p.newSlot.x,newY:p.newSlot.y,
+      path:onTrack
+        ? buildTrackPath(p,trackDirection,activeRadius)
+        : buildRadialPath(p)
+    };
+  });
 }
 
 // Update layer drag from current pointer position
@@ -1662,7 +1716,10 @@ window.__cube = {
       const visualMove=orientMoveForView(m,viewOrientationQ);
       const paths=buildDragDotMap(oldIds,newIds,visualMove) || [];
       const counts=paths.reduce((a,p)=>{const k=p.path?.kind||'none';a[k]=(a[k]||0)+1;return a;},{});
-      const directions=[...new Set(paths.map(p=>Math.sign(p.path?.da||0)).filter(Boolean))];
+      const directions=[...new Set(
+        paths.filter(p=>p.path?.kind==='track' || p.path?.kind==='view')
+          .map(p=>Math.sign(p.path?.da||0)).filter(Boolean)
+      )];
       out[name]={
         moving:paths.length,paths:counts,axis:visualMove.axis,dir:visualMove.dir,
         orbitDirections:directions,directionCoherent:directions.length<=1
@@ -1671,7 +1728,7 @@ window.__cube = {
     active=savedActive;
     return {
       ok:Object.values(out).every(x=>
-        x.moving===20 && x.paths.polar===20 && x.directionCoherent
+        x.moving===20 && x.paths.track===12 && x.paths.radial===8 && x.directionCoherent
       ),
       moves:out
     };
@@ -1702,7 +1759,7 @@ window.__cube = {
     }
     return {
       ok:Object.values(out).every(x=>
-        x.moving===52 && x.paths.polar===52 && x.directionCoherent
+        x.moving===52 && x.paths.view===52 && x.directionCoherent
       ),
       turns:out
     };
