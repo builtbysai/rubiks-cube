@@ -617,6 +617,13 @@ function decideTurn(dx, dy){
 }
 // Start a slow-drag: create pivot, attach cubies, track drag
 function startLayerDrag(turn, startX, startY){
+  // Capture the orbit's exact settled starting state BEFORE the nine cubies
+  // are reparented into the temporary rotation pivot. Once reparented they are
+  // no longer direct cubeGroup children, so taking this snapshot afterward
+  // made the drag map intermittently incomplete.
+  let oldState=null;
+  try { oldState=orientedStickerIds(faceletStickerIds()); } catch(err) {}
+
   const pivot = new THREE.Group();
   cubeGroup.add(pivot);
   const cubies = [];
@@ -625,33 +632,39 @@ function startLayerDrag(turn, startX, startY){
     if (Math.round(ch.userData.pos[turn.axis]) === turn.layer) cubies.push(ch);
   }
   for (const ch of cubies) pivot.add(ch);
-  layerDrag = {pivot, cubies, axis:turn.axis, layer:turn.layer, dir:turn.dir,
-               startX, startY, dirX:turn.dragDirX, dirY:turn.dragDirY, currentAngle:0};
-  // Compute the post-turn state to map dot movements during drag
-  // (Hans: orbit should reflect drag in real time, not just after)
+
+  layerDrag = {
+    pivot,cubies,axis:turn.axis,layer:turn.layer,dir:turn.dir,
+    startX,startY,dirX:turn.dragDirX,dirY:turn.dragDirY,currentAngle:0,
+    pathAngle:turn.dir*Math.PI/2
+  };
+
   try {
-    const oldState = orientedStickerIds(faceletStickerIds());
-    // Temporarily fake an active move to compute new state
-    const savedActive = active;
-    active = {axis: turn.axis, angle: turn.dir * Math.PI/2, cubies: cubies};
-    const newState = orientedStickerIds(faceletStickerIds());
-    active = savedActive;
-    layerDrag.oldState = oldState;
-    layerDrag.newState = newState;
-    // A logical face axis can point at a different orbit family after the
-    // whole cube has been reoriented.
+    if(!oldState) throw new Error('No pre-drag orbit state');
+
+    // Compute the exact quarter-turn destination while keeping the visible
+    // pivot at zero. This destination plus the live pivot angle gives us a
+    // deterministic continuous path for every intermediate drag position.
+    const savedActive=active;
+    active={axis:turn.axis,angle:turn.dir*Math.PI/2,cubies};
+    const newState=orientedStickerIds(faceletStickerIds());
+    active=savedActive;
+
     const visualMove=orientMoveForView(
       {axis:turn.axis,layer:turn.layer,dir:turn.dir,turns:1},
       viewOrientationQ
     );
-    layerDrag.pathAngle = turn.dir * Math.PI/2;
-    layerDrag.visualMove = visualMove;
-    layerDrag.dotMap = buildDragDotMap(oldState,newState,visualMove);
-  } catch (err) {
-    // If mapping fails, fall back to post-drag update only
-    layerDrag.dotMap = null;
+
+    layerDrag.oldState=oldState;
+    layerDrag.newState=newState;
+    layerDrag.visualMove=visualMove;
+    layerDrag.dotMap=buildDragDotMap(oldState,newState,visualMove);
+  } catch(err) {
+    layerDrag.dotMap=null;
+    console.warn('Orbit drag mapping failed',err);
   }
 }
+
 // Build mapping of dot movements for a drag: matches dots between old and new states
 function shortestAngleDelta(a0,a1){
   let d=a1-a0;
