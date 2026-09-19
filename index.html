@@ -207,6 +207,70 @@ const FACES = [
   { id:'B', n:[ 0, 0,-1], u:[ 0, 1, 0], r:[-1, 0, 0] },
 ];
 
+// Every facelet slot also has a cube-space surface position and normal.
+// The orbit uses this to rotate the complete 54-sticker projection when the
+// viewer turns the whole cube from one face to another.
+const FACELET_GEOMETRY = [];
+const FACELET_INDEX_BY_GEOMETRY = new Map();
+for (let fi=0; fi<FACES.length; fi++){
+  const f=FACES[fi];
+  for (let row=0; row<3; row++) for (let col=0; col<3; col++){
+    const up=1-row, right=col-1;
+    const p=[
+      f.n[0] + up*f.u[0] + right*f.r[0],
+      f.n[1] + up*f.u[1] + right*f.r[1],
+      f.n[2] + up*f.u[2] + right*f.r[2],
+    ];
+    const n=[...f.n];
+    const idx=fi*9+row*3+col;
+    FACELET_GEOMETRY[idx]={p,n};
+    FACELET_INDEX_BY_GEOMETRY.set(p.join(',')+'|'+n.join(','),idx);
+  }
+}
+
+const _viewVecP = new THREE.Vector3();
+const _viewVecN = new THREE.Vector3();
+const _viewAxis = new THREE.Vector3();
+const _viewAxisQ = new THREE.Quaternion();
+
+function axisQuaternion(axis, angle, target=new THREE.Quaternion()){
+  _viewAxis.set(0,0,0); _viewAxis[axis]=1;
+  return target.setFromAxisAngle(_viewAxis,angle);
+}
+
+function buildViewSlotPermutation(q){
+  const perm=new Array(54);
+  for (let i=0; i<54; i++){
+    const g=FACELET_GEOMETRY[i];
+    _viewVecP.set(...g.p).applyQuaternion(q).set(
+      Math.round(_viewVecP.x),Math.round(_viewVecP.y),Math.round(_viewVecP.z)
+    );
+    _viewVecN.set(...g.n).applyQuaternion(q).set(
+      Math.round(_viewVecN.x),Math.round(_viewVecN.y),Math.round(_viewVecN.z)
+    );
+    const key=[_viewVecP.x,_viewVecP.y,_viewVecP.z].join(',')+'|'+
+      [_viewVecN.x,_viewVecN.y,_viewVecN.z].join(',');
+    const dest=FACELET_INDEX_BY_GEOMETRY.get(key);
+    if (dest === undefined) throw new Error('Invalid view orientation');
+    perm[i]=dest;
+  }
+  return perm;
+}
+
+function applyViewPermutation(ids, perm){
+  const out=new Array(54);
+  for (let i=0; i<54; i++) out[perm[i]]=ids[i];
+  return out;
+}
+
+function orientMoveForView(move, q){
+  _viewAxis.set(0,0,0); _viewAxis[move.axis]=1;
+  _viewAxis.applyQuaternion(q);
+  const ax=Math.abs(_viewAxis.x)>.5?'x':Math.abs(_viewAxis.y)>.5?'y':'z';
+  const sign=Math.sign(_viewAxis[ax]) || 1;
+  return {...move, axis:ax, dir:(move.dir || 1)*sign};
+}
+
 // Standard Singmaster notation mapped to {axis, layer, dir}.
 // dir is the sign of a quarter turn about the positive axis; a prime flips it.
 const MOVES = {
@@ -310,8 +374,22 @@ let yaw = -1.5, pitch = 0.75;          // intro start
 let targetYaw = -0.62, targetPitch = 0.46;
 let zoomFactor = 1.35, targetZoomFactor = 1.0;   // intro dolly-in
 
+// Whole-cube viewing orientation. The reference does not leave the 2D
+// projection frozen while the 3D cube turns: all 54 stickers transition to
+// the next face orientation. We keep the resting orientation on exact
+// quarter-turns so every endpoint is a valid orbit node.
+const viewOrientationQ = new THREE.Quaternion();
+let viewSlotPermutation = buildViewSlotPermutation(viewOrientationQ);
+let viewDrag = null;  // direct manipulation between two face orientations
+let viewSnap = null;  // release animation to 0° or 90°
+const VIEW_DRAG_PX = 170;
+const _baseViewEuler = new THREE.Euler(0,0,0,'XYZ');
+const _baseViewQ = new THREE.Quaternion();
+const _displayOrientationQ = new THREE.Quaternion();
+const _stepViewQ = new THREE.Quaternion();
+
 const pointers = new Map();
-let downInfo = null;   // {sx, sy, orbit} or {sx, sy, cubie, normal, decided}
+let downInfo = null;   // sticker drag or whole-cube view drag
 let pinch = null;
 
 const raycaster = new THREE.Raycaster();
@@ -343,12 +421,67 @@ function pick(e){
   return null;
 }
 
+function orientedStickerIds(ids=faceletStickerIds(), perm=viewSlotPermutation){
+  return applyViewPermutation(ids,perm);
+}
+
+function startViewDrag(axis, dir, startX, startY){
+  if (viewDrag || viewSnap || active || layerDrag || queue.length || inputLocked()) return false;
+
+  const oldIds=orientedStickerIds();
+  axisQuaternion(axis,dir*Math.PI/2,_stepViewQ);
+  const targetQ=viewOrientationQ.clone().multiply(_stepViewQ);
+  const targetPerm=buildViewSlotPermutation(targetQ);
+  const newIds=orientedStickerIds(faceletStickerIds(),targetPerm);
+
+  const logicalMove={axis,dir,turns:1,whole:true};
+  const visualMove=orientMoveForView(logicalMove,viewOrientationQ);
+  viewDrag={
+    axis,dir,startX,startY,angle:0,
+    targetQ,targetPerm,visualMove,
+    dotMap:buildDragDotMap(oldIds,newIds,visualMove),
+  };
+  return true;
+}
+
+function updateViewDrag(curX,curY){
+  if(!viewDrag) return;
+  const delta=viewDrag.axis==='y' ? curX-viewDrag.startX : curY-viewDrag.startY;
+  const progress=Math.max(0,Math.min(1,(delta*viewDrag.dir)/VIEW_DRAG_PX));
+  viewDrag.angle=viewDrag.dir*progress*Math.PI/2;
+}
+
+function finishViewDrag(){
+  if(!viewDrag) return;
+  const startAngle=viewDrag.angle || 0;
+  const progress=Math.abs(startAngle)/(Math.PI/2);
+  const commit=progress>=0.5;
+  const targetAngle=commit ? viewDrag.dir*Math.PI/2 : 0;
+  const remaining=Math.abs(targetAngle-startAngle)/(Math.PI/2);
+  viewSnap={
+    ...viewDrag,
+    startAngle,targetAngle,displayAngle:startAngle,
+    commit,t:0,dur:Math.max(0.10,0.44*remaining),
+  };
+  viewDrag=null;
+}
+
+function currentViewProgress(source){
+  if(!source) return 0;
+  return Math.max(0,Math.min(1,
+    source.angle !== undefined
+      ? source.angle/(source.dir*Math.PI/2)
+      : source.displayAngle/(source.dir*Math.PI/2)
+  ));
+}
+
 canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
   if (pointers.size === 2){
     const [a, b] = [...pointers.values()];
     pinch = { d:Math.hypot(a.x-b.x, a.y-b.y), zoomFactor:targetZoomFactor };
+    viewDrag = null;
     downInfo = null;
     return;
   }
@@ -374,9 +507,16 @@ canvas.addEventListener('pointermove', e => {
   const dx = e.clientX - downInfo.sx, dy = e.clientY - downInfo.sy;
 
   if (downInfo.orbit){
-    targetYaw += dxAll * 0.0085;
-    targetPitch = Math.min(1.25, Math.max(-1.25, targetPitch + dyAll * 0.0085));
-    downInfo.sx = e.clientX; downInfo.sy = e.clientY;
+    if (viewSnap || active || layerDrag || queue.length || inputLocked()) return;
+    if (!viewDrag){
+      if (Math.hypot(dx,dy) < 10) return;
+      const horizontal=Math.abs(dx)>=Math.abs(dy);
+      const axis=horizontal?'y':'x';
+      const signed=horizontal?dx:dy;
+      const dir=Math.sign(signed) || 1;
+      if (!startViewDrag(axis,dir,downInfo.sx,downInfo.sy)) return;
+    }
+    updateViewDrag(e.clientX,e.clientY);
     return;
   }
   // Slow-drag layer twisting (Hans: tactile, not snap)
@@ -399,6 +539,7 @@ function endPointer(e){
   if (pointers.size < 2) pinch = null;
   if (pointers.size === 0){
     if (layerDrag) finishLayerDrag();
+    else if (viewDrag) finishViewDrag();
     downInfo = null;
   }
 }
@@ -463,17 +604,23 @@ function startLayerDrag(turn, startX, startY){
   // Compute the post-turn state to map dot movements during drag
   // (Hans: orbit should reflect drag in real time, not just after)
   try {
-    const oldState = faceletStickerIds();
+    const oldState = orientedStickerIds(faceletStickerIds());
     // Temporarily fake an active move to compute new state
     const savedActive = active;
     active = {axis: turn.axis, angle: turn.dir * Math.PI/2, cubies: cubies};
-    const newState = faceletStickerIds();
+    const newState = orientedStickerIds(faceletStickerIds());
     active = savedActive;
     layerDrag.oldState = oldState;
     layerDrag.newState = newState;
-    // Build dot movement map: for each dot, old slot -> new slot
+    // A logical face axis can point at a different orbit family after the
+    // whole cube has been reoriented.
+    const visualMove=orientMoveForView(
+      {axis:turn.axis,layer:turn.layer,dir:turn.dir,turns:1},
+      viewOrientationQ
+    );
     layerDrag.pathAngle = turn.dir * Math.PI/2;
-    layerDrag.dotMap = buildDragDotMap(oldState, newState, {axis:turn.axis,layer:turn.layer,dir:turn.dir,turns:1});
+    layerDrag.visualMove = visualMove;
+    layerDrag.dotMap = buildDragDotMap(oldState,newState,visualMove);
   } catch (err) {
     // If mapping fails, fall back to post-drag update only
     layerDrag.dotMap = null;
@@ -605,7 +752,7 @@ let suppressWin = false;
 let solveToken = 0;
 
 function inputLocked(){ return solving || solverBusy; }
-function busy(){ return active || layerDrag || queue.length > 0; }
+function busy(){ return active || layerDrag || viewDrag || viewSnap || queue.length > 0; }
 
 function enqueueMove(m){
   // A 180° turn is two visible quarter turns in the reference. Expanding it
@@ -625,7 +772,7 @@ const _tmpV = new THREE.Vector3();
 
 function startMove(m){
   // Capture the physical sticker permutation before reparenting the layer.
-  const oldIds = faceletStickerIds();
+  const oldIds = orientedStickerIds(faceletStickerIds());
   const pivot = new THREE.Group();
   cubeGroup.add(pivot);
   const cubies = [];
@@ -638,9 +785,10 @@ function startMove(m){
   const angle = m.dir*m.turns*Math.PI/2;
   const savedActive = active;
   active = {axis:m.axis, angle, cubies};
-  const newIds = faceletStickerIds();
+  const newIds = orientedStickerIds(faceletStickerIds());
   active = savedActive;
-  const orbitMap = buildDragDotMap(oldIds, newIds, m);
+  const visualMove=orientMoveForView(m,viewOrientationQ);
+  const orbitMap = buildDragDotMap(oldIds,newIds,visualMove);
 
   active = { pivot, cubies, axis:m.axis, angle, t:0, dur:(m.duration || 500)/1000, move:m,
              orbitMap, orbitStartAngle:0 };
@@ -1221,7 +1369,16 @@ function drawOrbit(){
             (active.orbitBaseAngle || active.angle || Math.PI/2)
           ))
         }
-      : null;
+      : viewDrag && viewDrag.dotMap
+        ? {map:viewDrag.dotMap,t:currentViewProgress(viewDrag)}
+        : viewSnap && viewSnap.dotMap
+          ? {
+              map:viewSnap.dotMap,
+              t:Math.max(0,Math.min(1,
+                viewSnap.displayAngle/(viewSnap.dir*Math.PI/2)
+              ))
+            }
+          : null;
 
   if (motion){
     const t = motion.t;
@@ -1232,7 +1389,7 @@ function drawOrbit(){
     }
   } else {
     // Settled state: map every persistent sticker identity to its exact node.
-    const ids = faceletStickerIds();
+    const ids = orientedStickerIds(faceletStickerIds());
     const slotById = new Map();
     for (const {slot, globalIdx} of slotMap) slotById.set(ids[globalIdx], slot);
     for (const dot of orbitDots){
@@ -1293,9 +1450,36 @@ function loop(now){
   yaw += (targetYaw - yaw) * 0.07;
   pitch += (targetPitch - pitch) * 0.07;
   zoomFactor += (targetZoomFactor - zoomFactor) * 0.1;
-  viewGroup.rotation.order = 'XYZ';   // yaw about world Y, then pitch: verticals stay vertical
-  viewGroup.rotation.y = yaw;
-  viewGroup.rotation.x = pitch;
+
+  if (viewSnap){
+    viewSnap.t += dt;
+    const k=Math.min(1,viewSnap.t/viewSnap.dur);
+    viewSnap.displayAngle=viewSnap.startAngle+
+      (viewSnap.targetAngle-viewSnap.startAngle)*easeInOut(k);
+    if(k>=1){
+      if(viewSnap.commit){
+        viewOrientationQ.copy(viewSnap.targetQ);
+        viewSlotPermutation=viewSnap.targetPerm;
+      }
+      viewSnap=null;
+    }
+  }
+
+  // Compose the fixed isometric presentation with the user's exact cube
+  // orientation. During a view drag the 3D cube and 2D orbit read the same
+  // angle, just like a face-layer drag.
+  _baseViewEuler.set(pitch,yaw,0,'XYZ');
+  _baseViewQ.setFromEuler(_baseViewEuler);
+  _displayOrientationQ.copy(viewOrientationQ);
+  if(viewDrag){
+    axisQuaternion(viewDrag.axis,viewDrag.angle,_stepViewQ);
+    _displayOrientationQ.multiply(_stepViewQ);
+  } else if(viewSnap){
+    axisQuaternion(viewSnap.axis,viewSnap.displayAngle,_stepViewQ);
+    _displayOrientationQ.multiply(_stepViewQ);
+  }
+  viewGroup.quaternion.copy(_baseViewQ).multiply(_displayOrientationQ);
+
   const wideComposition = stage.clientWidth >= 760;
   viewGroup.position.x += ((wideComposition ? 2.35 : 0) - viewGroup.position.x) * 0.08;
   camera.position.set(0, 0.7, fitZoom() * zoomFactor);
@@ -1347,6 +1531,14 @@ window.__cube = {
     pathCounts:(layerDrag?.dotMap || active?.orbitMap || []).reduce((a,m)=>{const k=m.path?.kind||'line';a[k]=(a[k]||0)+1;return a;},{})
   }),
   syncState(){
+    if(viewDrag){
+      const p=currentViewProgress(viewDrag);
+      return {mode:'view-drag',angle:viewDrag.angle,cubeProgress:p,orbitProgress:p};
+    }
+    if(viewSnap){
+      const p=Math.max(0,Math.min(1,viewSnap.displayAngle/(viewSnap.dir*Math.PI/2)));
+      return {mode:'view-snap',angle:viewSnap.displayAngle,cubeProgress:p,orbitProgress:p};
+    }
     if (layerDrag){
       const angle=layerDrag.pivot.rotation[layerDrag.axis];
       const denom=layerDrag.pathAngle || Math.PI/2;
@@ -1406,7 +1598,11 @@ window.__cube = {
     }
     return null;
   },
-  view: () => ({ yaw, pitch }),
+  view: () => ({
+    yaw,pitch,
+    orientation:[viewOrientationQ.x,viewOrientationQ.y,viewOrientationQ.z,viewOrientationQ.w],
+    dragging:!!viewDrag,snapping:!!viewSnap
+  }),
   state: () => ({ queue:queue.length, active:!!active, history:history.length }),
   dbg: () => ({ queue:queue.length, active:!!active, t:active&&+active.t.toFixed(3),
     dur:active&&active.dur, cubies:cubeGroup.children.filter(c=>c.userData.pos).length,
