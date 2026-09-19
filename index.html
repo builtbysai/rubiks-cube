@@ -194,7 +194,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 /* ---------------------------------- model ---------------------------------- */
 
-const FACE_COLORS = { U:0xffffff, D:0xffd500, F:0x009b48, B:0x0046ad, R:0xb71234, L:0xff5800 };
+const FACE_COLORS = { U:0xfff000, D:0xff1717, F:0xff20cc, B:0x00df3b, R:0x18dce8, L:0x1737d7 };
 
 // Face order for the solver string is URFDLB. Each entry: outward normal n,
 // screen-up u and screen-right r when looking straight at the face.
@@ -445,7 +445,7 @@ function computeTurn(dx, dy){
 function decideTurn(dx, dy){
   const t = computeTurn(dx, dy);
   if (!t) return;
-  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:520, record:true});
+  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:360, record:true});
   noteActivity();
 }
 // Start a slow-drag: create pivot, attach cubies, track drag
@@ -472,7 +472,8 @@ function startLayerDrag(turn, startX, startY){
     layerDrag.oldState = oldState;
     layerDrag.newState = newState;
     // Build dot movement map: for each dot, old slot -> new slot
-    layerDrag.dotMap = buildDragDotMap(oldState, newState);
+    layerDrag.pathAngle = turn.dir * Math.PI/2;
+    layerDrag.dotMap = buildDragDotMap(oldState, newState, {axis:turn.axis,layer:turn.layer,dir:turn.dir,turns:1});
   } catch (err) {
     // If mapping fails, fall back to post-drag update only
     layerDrag.dotMap = null;
@@ -482,74 +483,116 @@ function startLayerDrag(turn, startX, startY){
 function circleById(id){
   return getOrbitGeometry().circles.find(c => c.id === id) || null;
 }
-
-function sharedCircle(a, b){
-  if (!a || !b || !a.circles || !b.circles) return null;
-  const id = a.circles.find(x => b.circles.includes(x));
+function parseOrbitCircle(id){
+  return {family:id[0], ring:Number(id.slice(1))};
+}
+function sharedCircle(a,b){
+  if (!a || !b) return null;
+  const id=a.circles.find(x => b.circles.includes(x));
   return id ? circleById(id) : null;
 }
-
-function orbitArc(oldSlot, newSlot){
-  const circle = sharedCircle(oldSlot, newSlot);
-  if (circle){
-    const a0 = Math.atan2(oldSlot.y-circle.y, oldSlot.x-circle.x);
-    const a1 = Math.atan2(newSlot.y-circle.y, newSlot.x-circle.x);
-    let da = a1-a0;
-    while (da > Math.PI) da -= Math.PI*2;
-    while (da < -Math.PI) da += Math.PI*2;
-    return {kind:'circle', cx:circle.x, cy:circle.y, r:circle.r, a0, da};
-  }
-
-  // Face turns also rotate the 3x3 face cluster itself. Those eight face
-  // stickers do not necessarily share one of the nine drawn axis circles.
-  // Give them a true curved sweep instead of a straight chord. The curve is
-  // tangent-like at both ends and lands exactly on the destination node.
-  const dx=newSlot.x-oldSlot.x, dy=newSlot.y-oldSlot.y;
-  const d=Math.max(1,Math.hypot(dx,dy));
-  const nx=-dy/d, ny=dx/d;
-  const bend=Math.min(d*.42, getOrbitGeometry().S*.075);
-  return {
-    kind:'bezier',
-    x0:oldSlot.x,y0:oldSlot.y,x1:newSlot.x,y1:newSlot.y,
-    cx:(oldSlot.x+newSlot.x)/2+nx*bend,
-    cy:(oldSlot.y+newSlot.y)/2+ny*bend
-  };
+function shortestAngleDelta(a0,a1){
+  let d=a1-a0;
+  while(d>Math.PI)d-=Math.PI*2;
+  while(d<-Math.PI)d+=Math.PI*2;
+  return d;
+}
+function intersectionForFamilies(f1,r1,f2,r2,groupKey,near){
+  const g=getOrbitGeometry();
+  const c1=g.centers[f1], c2=g.centers[f2];
+  const pts=circleIntersections(c1[0],c1[1],r1,c2[0],c2[1],r2);
+  if (!pts.length) return near || {x:g.S/2,y:g.S/2};
+  const sideWanted=groupKey.slice(-1);
+  const pair=groupKey.slice(0,2);
+  const [n1,n2]=pair.split('');
+  const p1=g.centers[n1], p2=g.centers[n2];
+  const good=pts.filter(([x,y])=>{
+    const cross=(p2[0]-p1[0])*(y-p1[1])-(p2[1]-p1[1])*(x-p1[0]);
+    return (cross>0?'A':'B')===sideWanted;
+  });
+  const candidates=good.length?good:pts;
+  if (!near) return {x:candidates[0][0],y:candidates[0][1]};
+  candidates.sort((a,b)=>
+    Math.hypot(a[0]-near.x,a[1]-near.y)-Math.hypot(b[0]-near.x,b[1]-near.y)
+  );
+  return {x:candidates[0][0],y:candidates[0][1]};
 }
 
-function orbitPoint(m, t){
-  t=Math.max(-1,Math.min(1,t));
-  if (!m.arc) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
-  if (m.arc.kind==='circle'){
-    const a=m.arc.a0+m.arc.da*t;
-    return {x:m.arc.cx+Math.cos(a)*m.arc.r,y:m.arc.cy+Math.sin(a)*m.arc.r};
+function buildOrbitPath(oldSlot,newSlot,move){
+  const circle=sharedCircle(oldSlot,newSlot);
+  if(circle){
+    const a0=Math.atan2(oldSlot.y-circle.y,oldSlot.x-circle.x);
+    const a1=Math.atan2(newSlot.y-circle.y,newSlot.x-circle.x);
+    return {kind:'circle',cx:circle.x,cy:circle.y,r:circle.r,a0,da:shortestAngleDelta(a0,a1)};
   }
-  // Quadratic Bezier. Negative t is used while a manual drag is reversed.
-  const u=1-t;
-  return {
-    x:u*u*m.arc.x0+2*u*t*m.arc.cx+t*t*m.arc.x1,
-    y:u*u*m.arc.y0+2*u*t*m.arc.cy+t*t*m.arc.y1
-  };
+
+  // Sticker lies on the face being turned. Its two layer coordinates rotate
+  // continuously. Convert those coordinates to continuously varying radii and
+  // intersect the corresponding two axis-circle families every frame.
+  const groupKey=oldSlot.pair+oldSlot.side;
+  const oldCs=oldSlot.circles.map(parseOrbitCircle);
+  const newCs=newSlot.circles.map(parseOrbitCircle);
+  const byFamilyOld=Object.fromEntries(oldCs.map(q=>[q.family,q]));
+  const byFamilyNew=Object.fromEntries(newCs.map(q=>[q.family,q]));
+  const families=Object.keys(byFamilyOld);
+  if(families.length===2 && families.every(k=>byFamilyNew[k])){
+    const a=families[0], b=families[1];
+    const a0=ORBIT_RING_TO_COORD(byFamilyOld[a].ring);
+    const b0=ORBIT_RING_TO_COORD(byFamilyOld[b].ring);
+    const a1=ORBIT_RING_TO_COORD(byFamilyNew[a].ring);
+    const b1=ORBIT_RING_TO_COORD(byFamilyNew[b].ring);
+    let quarter=1;
+    // Pick the signed 90-degree rotation in this 2D coordinate plane that
+    // lands on the exact destination coordinates.
+    const plus=[-b0,a0], minus=[b0,-a0];
+    if (Math.abs(plus[0]-a1)+Math.abs(plus[1]-b1) <=
+        Math.abs(minus[0]-a1)+Math.abs(minus[1]-b1)) quarter=1;
+    else quarter=-1;
+    return {kind:'face',familyA:a,familyB:b,a0,b0,quarter,groupKey};
+  }
+  return {kind:'line',x0:oldSlot.x,y0:oldSlot.y,x1:newSlot.x,y1:newSlot.y};
 }
 
-// Build an exact physical-sticker movement map. No color matching and no greedy
-// reassignment: sticker identity survives every move.
-function buildDragDotMap(oldIds, newIds){
-  const slotMap = getOrbitSlotMap();
-  if (!slotMap || slotMap.length !== 54 || !orbitDots || orbitDots.length !== 54) return null;
-  const oldSlotById = new Map(), newSlotById = new Map();
-  for (const {slot, globalIdx} of slotMap){
-    oldSlotById.set(oldIds[globalIdx], slot);
-    newSlotById.set(newIds[globalIdx], slot);
+function orbitPoint(m,t){
+  t=Math.max(0,Math.min(1,t));
+  const p=m.path;
+  if(!p) return {x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
+  if(p.kind==='circle'){
+    const a=p.a0+p.da*t;
+    return {x:p.cx+Math.cos(a)*p.r,y:p.cy+Math.sin(a)*p.r};
   }
-  const map = [];
-  for (const dot of orbitDots){
-    const oldSlot = oldSlotById.get(dot.id);
-    const newSlot = newSlotById.get(dot.id);
-    if (!oldSlot || !newSlot) continue;
-    if (Math.hypot(oldSlot.x-newSlot.x, oldSlot.y-newSlot.y) < 0.01) continue;
+  if(p.kind==='face'){
+    const theta=p.quarter*(Math.PI/2)*t;
+    const ca=Math.cos(theta), sa=Math.sin(theta);
+    const va=p.a0*ca-p.b0*sa;
+    const vb=p.a0*sa+p.b0*ca;
+    const g=getOrbitGeometry();
+    const mid=g.radii[1], step=g.radii[2]-g.radii[1];
+    const ra=mid+va*step, rb=mid+vb*step;
+    const near={x:m.oldX+(m.newX-m.oldX)*t,y:m.oldY+(m.newY-m.oldY)*t};
+    return intersectionForFamilies(p.familyA,ra,p.familyB,rb,p.groupKey,near);
+  }
+  return {x:p.x0+(p.x1-p.x0)*t,y:p.y0+(p.y1-p.y0)*t};
+}
+
+// Persistent physical sticker identity means every dot has one unambiguous
+// source and destination node for a move.
+function buildDragDotMap(oldIds,newIds,move){
+  const slotMap=getOrbitSlotMap();
+  if(!slotMap || slotMap.length!==54 || !orbitDots || orbitDots.length!==54) return null;
+  const oldSlotById=new Map(), newSlotById=new Map();
+  for(const {slot,globalIdx} of slotMap){
+    oldSlotById.set(oldIds[globalIdx],slot);
+    newSlotById.set(newIds[globalIdx],slot);
+  }
+  const map=[];
+  for(const dot of orbitDots){
+    const oldSlot=oldSlotById.get(dot.id), newSlot=newSlotById.get(dot.id);
+    if(!oldSlot || !newSlot) continue;
+    if(Math.hypot(oldSlot.x-newSlot.x,oldSlot.y-newSlot.y)<0.01) continue;
     map.push({
-      dot, oldX:oldSlot.x, oldY:oldSlot.y, newX:newSlot.x, newY:newSlot.y,
-      arc:orbitArc(oldSlot,newSlot)
+      dot,oldX:oldSlot.x,oldY:oldSlot.y,newX:newSlot.x,newY:newSlot.y,
+      path:buildOrbitPath(oldSlot,newSlot,move)
     });
   }
   return map;
@@ -583,19 +626,19 @@ function finishLayerDrag(){
     const dragOrbitMap = layerDrag.dotMap;
     const startAngle = layerDrag.visualAngle ?? currentAngle ?? 0;
     active = {pivot, cubies, axis, angle:0, t:0, dur:0.34,
-              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:340, record:false},
+              move:{axis, layer:layerDrag.layer, dir, turns:0, duration:300, record:false},
               fromAngle:startAngle, isDragFinish:true, isCancelledDrag:true,
-              orbitMap:dragOrbitMap, orbitStartAngle:startAngle};
+              orbitMap:dragOrbitMap, orbitStartAngle:startAngle, orbitBaseAngle:(layerDrag.pathAngle || Math.sign(startAngle||1)*Math.PI/2)};
     layerDrag = null;
     return;
   }
   // Animate from current to target, then finish as a move
-  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:420, record:true};
+  const move = {axis, layer:layerDrag.layer, dir:Math.sign(quarterTurns)*dir, turns:actualTurns, duration:340, record:true};
   // Set up as an active move starting from current angle
   const startAngle = currentAngle || 0;
   const dragOrbitMap = layerDrag.dotMap;
-  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.42, move,
-            fromAngle:startAngle, isDragFinish:true, orbitMap:dragOrbitMap, orbitStartAngle:startAngle};
+  active = {pivot, cubies, axis, angle:targetAngle, t:0, dur:0.34, move,
+            fromAngle:startAngle, isDragFinish:true, orbitMap:dragOrbitMap, orbitStartAngle:startAngle, orbitBaseAngle:(layerDrag.pathAngle || targetAngle || Math.PI/2)};
   layerDrag = null;
   noteActivity();
 }
@@ -636,7 +679,7 @@ function startMove(m){
   active = {axis:m.axis, angle, cubies};
   const newIds = faceletStickerIds();
   active = savedActive;
-  const orbitMap = buildDragDotMap(oldIds, newIds);
+  const orbitMap = buildDragDotMap(oldIds, newIds, m);
 
   active = { pivot, cubies, axis:m.axis, angle, t:0, dur:(m.duration || 190)/1000, move:m,
              orbitMap, orbitStartAngle:0 };
@@ -978,7 +1021,7 @@ window.addEventListener('keydown', e => {
 // each with 3 concentric rings. The reference shows the solved cube; dots
 // sit exactly where rings from different centers cross.
 
-const ORBIT_CSS = { U:'#ffffff', D:'#ffd500', F:'#00c853', B:'#2962ff', R:'#ff1744', L:'#ff5800' };
+const ORBIT_CSS = { U:'#fff000', D:'#ff1717', F:'#ff20cc', B:'#00df3b', R:'#18dce8', L:'#1737d7' };
 
 const orbitPanel = document.getElementById('orbitPanel');
 const orbitCanvas = document.getElementById('orbit');
@@ -1092,8 +1135,8 @@ let orbitSlotMap = null;
 function getOrbitGeometry(){
   const S = orbitSize();
   if (!orbitCache || Math.abs(orbitCache.S - S) > 1){
-    const {slots, circles} = buildOrbitSlots(S);
-    orbitCache = {S, slots, circles};
+    const {slots, circles, centers} = buildOrbitSlots(S);
+    orbitCache = {S, slots, circles, centers, radii:[S*0.28*0.85, S*0.28, S*0.28*1.15]};
   }
   return orbitCache;
 }
@@ -1101,76 +1144,51 @@ function getOrbitGeometry(){
 // Map each slot to a face color for the SOLVED state.
 // The 6 (pair, side) groups correspond to the 6 faces.
 // Assignment matches the reference image positions.
-function solvedColorForSlot(slot, S){
-  // Use position to assign: top-left=red, top= yellow, top-right=blue,
-  // mid-left=green, mid-right=orange, bottom=white
-  // This is a heuristic based on the slot's (x,y)
-  const cx = S/2, cy = S/2;
-  const dx = slot.x - cx, dy = slot.y - cy;
-  const angle = Math.atan2(dy, dx);  // -pi to pi
-  const dist = Math.hypot(dx, dy);
-  
-  // 6 sectors around the center
-  // Angles: -pi to pi. Let's define:
-  // Top-left (red): angle ~ -2.2 rad (-126 deg)
-  // Top (yellow): angle ~ -1.57 rad (-90 deg)  
-  // Top-right (blue): angle ~ -0.9 rad (-52 deg)
-  // Bottom-right (orange): angle ~ 0.9 rad (52 deg)
-  // Bottom (white): angle ~ 1.57 rad (90 deg)
-  // Bottom-left (green): angle ~ 2.2 rad (126 deg)
-  
-  // Normalize angle to 0-2pi
-  let a = angle;
-  if (a < 0) a += Math.PI*2;
-  // a in [0, 2pi). 0 = east, pi/2 = south, pi = west, 3pi/2 = north.
-  
-  // Define sectors (in radians, 0=east, going clockwise? atan2 goes ccw)
-  // Let's use: north = 3pi/2 (or -pi/2)
-  // We'll map based on the reference layout
-  
-  // Simpler: use the (pair, side) directly with a fixed mapping,
-  // then verify visually and adjust.
-  const key = slot.pair + slot.side;
-  // Verified against reference image (6 clusters, 3x3 each)
-  const map = {
-    'TLA': 'R',  // top-left: red
-    'TRB': 'B',  // top-right: blue
-    'LRA': 'U',  // bottom: white
-    'LRB': 'D',  // top-center: yellow
-    'TRA': 'F',  // mid-left: green
-    'TLB': 'L',  // mid-right: orange
-  };
-  return map[key] || 'U';
+const ORBIT_FAMILY_FOR_AXIS = {x:'L', y:'T', z:'R'};
+const ORBIT_AXIS_FOR_FAMILY = {L:'x', T:'y', R:'z'};
+const ORBIT_FACE_FOR_GROUP = {
+  TLA:'B', TLB:'R',
+  TRA:'F', TRB:'L',
+  LRA:'D', LRB:'U',
+};
+const ORBIT_GROUP_FOR_FACE = Object.fromEntries(
+  Object.entries(ORBIT_FACE_FOR_GROUP).map(([k,v]) => [v,k])
+);
+const ORBIT_COORD_TO_RING = v => Math.max(0,Math.min(2,Math.round(v)+1));
+const ORBIT_RING_TO_COORD = ring => ring-1;
+
+function solvedColorForSlot(slot){
+  return ORBIT_FACE_FOR_GROUP[slot.pair + slot.side] || 'U';
 }
 
-// Map each slot to a (face, idx) in solved state.
-// The 6 (pair, side) groups correspond to 6 faces. Within each group,
-// sort by position to assign idx 0-8.
+// Exact mapping from a cube facelet to the intersection of the two layer
+// circles perpendicular to that sticker's normal. This is the construction
+// used by the reference: Y axis on top, X lower-left, Z lower-right.
 function getOrbitSlotMap(){
   if (orbitSlotMap) return orbitSlotMap;
   const {slots} = getOrbitGeometry();
-  // Group by (pair, side)
-  const groups = {};
-  for (const s of slots){
-    const k = s.pair + s.side;
-    if (!groups[k]) groups[k] = [];
-    groups[k].push(s);
-  }
-  // Map (pair,side) to face (verified against reference)
-  const faceFor = {
-    'TLA': 'R', 'TRB': 'B', 'LRA': 'U',
-    'LRB': 'D', 'TRA': 'F', 'TLB': 'L',
-  };
-  // FACES order: U, R, F, D, L, B (indices 0-5)
-  const faceIndex = {U:0, R:1, F:2, D:3, L:4, B:5};
   orbitSlotMap = [];
-  for (const k in groups){
-    const face = faceFor[k];
-    const fi = faceIndex[face];
-    // Sort by y then x for consistent idx
-    const g = groups[k].sort((a,b) => (a.y-b.y) || (a.x-b.x));
-    for (let i=0; i<g.length; i++){
-      orbitSlotMap.push({slot: g[i], globalIdx: fi*9 + i});
+
+  for (let fi=0; fi<FACES.length; fi++){
+    const f=FACES[fi];
+    const normalAxis = f.n[0] ? 'x' : f.n[1] ? 'y' : 'z';
+    const otherAxes = ['x','y','z'].filter(a => a !== normalAxis);
+    const groupKey = ORBIT_GROUP_FOR_FACE[f.id];
+
+    for (let row=0; row<3; row++) for (let col=0; col<3; col++){
+      const up=1-row, right=col-1;
+      const p={
+        x:f.n[0] + up*f.u[0] + right*f.r[0],
+        y:f.n[1] + up*f.u[1] + right*f.r[1],
+        z:f.n[2] + up*f.u[2] + right*f.r[2],
+      };
+      const wanted=otherAxes.map(a => ORBIT_FAMILY_FOR_AXIS[a] + ORBIT_COORD_TO_RING(p[a]));
+      const slot=slots.find(s =>
+        (s.pair+s.side)===groupKey &&
+        wanted.every(id => s.circles.includes(id))
+      );
+      if (!slot) throw new Error('Orbit node mapping failed for '+f.id+row+col);
+      orbitSlotMap.push({slot, globalIdx:fi*9 + row*3 + col});
     }
   }
   return orbitSlotMap;
@@ -1228,7 +1246,7 @@ function drawOrbit(){
   // One normalized move timeline drives both the cube and the orbit diagram.
   // Manual drags are fully reversible; queued/solver moves use the same paths.
   const motion = layerDrag && layerDrag.dotMap
-    ? {map:layerDrag.dotMap, t:Math.max(-1, Math.min(1, (layerDrag.visualAngle ?? layerDrag.currentAngle ?? 0)/(Math.PI/2)))}
+    ? {map:layerDrag.dotMap, t:Math.max(0, Math.min(1, (layerDrag.visualAngle ?? layerDrag.currentAngle ?? 0)/(layerDrag.pathAngle || Math.PI/2)))}
     : active && active.orbitMap
       ? {map:active.orbitMap, t:(active.orbitProgress ?? 0)}
       : null;
@@ -1335,9 +1353,9 @@ function loop(now){
     // finish we preserve the progress already reached instead of restarting.
     if (active.orbitMap){
       if (active.isCancelledDrag){
-        active.orbitProgress = displayedAngle / (Math.PI/2);
+        active.orbitProgress = Math.max(0,Math.min(1, displayedAngle / (active.orbitBaseAngle || Math.PI/2)));
       } else if (active.fromAngle !== undefined){
-        active.orbitProgress = displayedAngle / (Math.PI/2);
+        active.orbitProgress = Math.max(0,Math.min(1, displayedAngle / (active.orbitBaseAngle || active.angle || Math.PI/2)));
       } else {
         active.orbitProgress = active.angle ? displayedAngle / active.angle : 0;
       }
@@ -1362,7 +1380,7 @@ window.__cube = {
     for (const t of notation.trim().split(/\s+/)){
       if (!t) continue;
       const m = { ...parseMove(t), record:true };
-      if (instant) applyInstant(m); else queue.push({ ...m, duration:520 });
+      if (instant) applyInstant(m); else queue.push({ ...m, duration:360 });
     }
     moveCount += 0;
   },
@@ -1370,7 +1388,7 @@ window.__cube = {
   orbit: () => ({
     on:orbitOn,
     dots:orbitDots ? orbitDots.length : 0,
-    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.arc?.kind || 'line'}))
+    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.path?.kind || 'line'}))
   }),
   orbitDotCount(){
     let n = 0;
