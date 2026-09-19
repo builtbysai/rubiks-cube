@@ -268,7 +268,12 @@ function orientMoveForView(move, q){
   _viewAxis.applyQuaternion(q);
   const ax=Math.abs(_viewAxis.x)>.5?'x':Math.abs(_viewAxis.y)>.5?'y':'z';
   const sign=Math.sign(_viewAxis[ax]) || 1;
-  return {...move, axis:ax, dir:(move.dir || 1)*sign};
+  return {
+    ...move,
+    axis:ax,
+    dir:(move.dir || 1)*sign,
+    layer:move.layer === undefined ? move.layer : move.layer*sign
+  };
 }
 
 function localAxisForVisualAxis(visualAxis, desiredDir){
@@ -530,7 +535,7 @@ canvas.addEventListener('pointermove', e => {
   if (downInfo.orbit){
     if (viewSnap || active || layerDrag || queue.length || inputLocked()) return;
     if (!viewDrag){
-      if (Math.hypot(dx,dy) < 10) return;
+      if (Math.hypot(dx,dy) < 3) return;
       const horizontal=Math.abs(dx)>=Math.abs(dy);
       const signed=horizontal?dx:dy;
       const desiredDir=Math.sign(signed) || 1;
@@ -545,7 +550,7 @@ canvas.addEventListener('pointermove', e => {
     updateLayerDrag(e.clientX, e.clientY);
     return;
   }
-  if (downInfo.decided || Math.hypot(dx, dy) < 12) return;
+  if (downInfo.decided || Math.hypot(dx, dy) < 3) return;
   // Start a layer drag instead of snapping
   if (busy() || inputLocked()) return;
   const turn = computeTurn(dx, dy);
@@ -655,6 +660,31 @@ function shortestAngleDelta(a0,a1){
   return d;
 }
 
+function orbitDirectionForMove(move){
+  // Canvas angles increase clockwise because +Y points downward.
+  // Standard clockwise face turns therefore all use +1 regardless of which
+  // face is currently visible. Prime/reverse turns use -1. Whole-cube view
+  // rotations use the same convention from the gesture's visual direction.
+  if(move.layer !== undefined && move.layer !== null){
+    const layerSign=Math.sign(move.layer) || 1;
+    return Math.sign(-(move.dir || 1)*layerSign) || 1;
+  }
+  return Math.sign(-(move.dir || 1)) || 1;
+}
+
+function directedAngleDelta(a0,a1,direction){
+  const tau=Math.PI*2;
+  let d=a1-a0;
+  if(direction>0){
+    while(d<0)d+=tau;
+    while(d>=tau)d-=tau;
+  }else{
+    while(d>0)d-=tau;
+    while(d<=-tau)d+=tau;
+  }
+  return d;
+}
+
 // This is the key behavior in the reference animation.
 // A turn about X/Y/Z is visualized around the matching X/Y/Z circle center.
 // Every affected sticker interpolates in POLAR coordinates around that center:
@@ -669,14 +699,15 @@ function buildOrbitPath(oldSlot,newSlot,move){
   const x1=newSlot.x-center[0], y1=newSlot.y-center[1];
   const r0=Math.hypot(x0,y0), r1=Math.hypot(x1,y1);
   const a0=Math.atan2(y0,x0), a1=Math.atan2(y1,x1);
-  let da=shortestAngleDelta(a0,a1);
+  const direction=orbitDirectionForMove(move);
+  let da=directedAngleDelta(a0,a1,direction);
 
-  // A 180-degree cube move is ambiguous under shortest-angle wrapping.
-  // Keep its sweep direction stable with the cube move.
-  if (move.turns===2 && Math.abs(Math.abs(da)-Math.PI)<0.18){
-    da=Math.sign(move.dir || 1)*Math.PI;
+  // Half turns are expanded into two visible quarter turns elsewhere, but
+  // keep this deterministic for debug/direct calls too.
+  if(move.turns===2 && Math.abs(Math.abs(da)-Math.PI)<0.18){
+    da=direction*Math.PI;
   }
-  return {kind:'polar',cx:center[0],cy:center[1],r0,r1,a0,da};
+  return {kind:'polar',cx:center[0],cy:center[1],r0,r1,a0,da,direction};
 }
 
 function orbitPoint(m,t){
@@ -718,7 +749,7 @@ function updateLayerDrag(curX, curY){
   const dx = curX - layerDrag.startX, dy = curY - layerDrag.startY;
   // Project drag onto the turn direction
   const dist = dx*layerDrag.dirX + dy*layerDrag.dirY;
-  // 140px drag = 90 degrees (tunable)
+  // 155px drag = 90 degrees. The orbit reads this exact angle on the same frame.
   const progress = Math.max(0, Math.min(1, dist / 155));
   const angle = layerDrag.dir * progress * (Math.PI/2);
   // Pointer input can arrive unevenly, especially on touch. Smooth the visual
@@ -1549,8 +1580,10 @@ window.__cube = {
   orbit: () => ({
     on:orbitOn,
     dots:orbitDots ? orbitDots.length : 0,
-    activePaths:(layerDrag?.dotMap || active?.orbitMap || []).map(m => ({path:m.path?.kind || 'line'})),
-    pathCounts:(layerDrag?.dotMap || active?.orbitMap || []).reduce((a,m)=>{const k=m.path?.kind||'line';a[k]=(a[k]||0)+1;return a;},{})
+    activePaths:(layerDrag?.dotMap || active?.orbitMap || viewDrag?.dotMap || viewSnap?.dotMap || [])
+      .map(m => ({path:m.path?.kind || 'line', direction:Math.sign(m.path?.da || 0)})),
+    pathCounts:(layerDrag?.dotMap || active?.orbitMap || viewDrag?.dotMap || viewSnap?.dotMap || [])
+      .reduce((a,m)=>{const k=m.path?.kind||'line';a[k]=(a[k]||0)+1;return a;},{})
   }),
   syncState(){
     if(viewDrag){
