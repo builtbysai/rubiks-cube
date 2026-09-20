@@ -57,3 +57,21 @@ The dependency-free test in `tests/orbit-reference-model.test.mjs` protects:
 - coherent direction for visible face turns
 - 1:1 cube/orbit normalized drag progress
 - quarter-turn round trips
+
+
+## Continuous view rotation
+
+Background rotation is intentionally split into two layers of state:
+
+1. The visible cube follows the user's drag continuously with no 90° clamp.
+2. Every completed quarter turn is folded into the exact discrete
+   `viewOrientationQ` used by the orbit graph.
+3. The remaining partial quarter is rendered as the current live orbit
+   transition.
+4. Reversing the same drag walks those quarter-turn segments backward without
+   changing axes or losing sticker identity.
+5. Releasing only snaps the final partial segment to its nearest valid
+   quarter-turn orientation.
+
+This lets the cube rotate through full 360° revolutions while preserving the
+orbit's exact 54-node topology and leaving face turns safe after the gesture.
