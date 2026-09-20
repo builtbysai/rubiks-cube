@@ -1467,14 +1467,15 @@ let yaw = -0.62, pitch = 0.46;
 let targetYaw = -0.62, targetPitch = 0.46;
 let zoomFactor = 1.0, targetZoomFactor = 1.0;
 
-// Whole-cube viewing orientation. The reference does not leave the 2D
-// projection frozen while the 3D cube turns: all 54 stickers transition to
-// the next face orientation. We keep the resting orientation on exact
-// quarter-turns so every endpoint is a valid orbit node.
+// Whole-cube viewing orientation. Resting states remain exact quarter-turn
+// orientations so the orbit graph is always valid, but a single background
+// drag may now sweep through any number of quarter turns (including 360°+).
+// The visible cube is continuous while the orbit consumes the gesture as a
+// sequence of valid 90° segments.
 const viewOrientationQ = new THREE.Quaternion();
 let viewSlotPermutation = buildViewSlotPermutation(viewOrientationQ);
-let viewDrag = null;  // direct manipulation between two face orientations
-let viewSnap = null;  // release animation to 0° or 90°
+let viewDrag = null;  // unlimited direct manipulation, segmented into 90° orbit moves
+let viewSnap = null;  // release animation for only the final partial segment
 const VIEW_DRAG_PX = 170;
 const _baseViewEuler = new THREE.Euler(0,0,0,'XYZ');
 const _baseViewQ = new THREE.Quaternion();
@@ -1518,43 +1519,128 @@ function orientedStickerIds(ids=faceletStickerIds(), perm=viewSlotPermutation){
   return applyViewPermutation(ids,perm);
 }
 
-function startViewDrag(axis, dir, startX, startY){
-  if (viewDrag || viewSnap || active || layerDrag || queue.length || inputLocked()) return false;
+function signedWholeTurns(turns){
+  // Truncate toward zero so the residual always represents the currently
+  // visible partial quarter-turn segment.
+  return turns >= 0 ? Math.floor(turns) : Math.ceil(turns);
+}
 
-  const oldIds=orientedStickerIds();
+function buildViewSegmentMap(axis,dir){
+  const oldIds=orientedStickerIds(faceletStickerIds(),viewSlotPermutation);
   axisQuaternion(axis,dir*Math.PI/2,_stepViewQ);
   const targetQ=viewOrientationQ.clone().multiply(_stepViewQ);
   const targetPerm=buildViewSlotPermutation(targetQ);
   const newIds=orientedStickerIds(faceletStickerIds(),targetPerm);
-
   const logicalMove={axis,dir,turns:1,whole:true};
   const visualMove=orientMoveForView(logicalMove,viewOrientationQ);
+  return {
+    dir,targetQ,targetPerm,visualMove,
+    dotMap:buildDragDotMap(oldIds,newIds,visualMove)
+  };
+}
+
+function startViewDrag(axis,positiveScreenDir,screenAxis,startX,startY){
+  if (viewDrag || viewSnap || active || layerDrag || queue.length || inputLocked()) return false;
+
   viewDrag={
-    axis,dir,startX,startY,angle:0,
-    screenAxis:visualMove.axis==='y'?'horizontal':'vertical',
-    screenDir:visualMove.dir,
-    targetQ,targetPerm,visualMove,
-    dotMap:buildDragDotMap(oldIds,newIds,visualMove),
+    axis,
+    positiveScreenDir,
+    screenAxis,
+    startX,startY,
+    baseQ:viewOrientationQ.clone(),
+    committedTurns:0,
+    angle:0,
+    dir:positiveScreenDir,
+    segmentKey:null,
+    targetQ:null,
+    targetPerm:null,
+    visualMove:null,
+    dotMap:null,
   };
   return true;
 }
 
+function refreshViewDragSegment(committedTurns,residualTurns){
+  if(!viewDrag) return;
+
+  // Rebuild the exact discrete orientation from the drag-start orientation.
+  axisQuaternion(
+    viewDrag.axis,
+    committedTurns*Math.PI/2,
+    _stepViewQ
+  );
+  viewOrientationQ.copy(viewDrag.baseQ).multiply(_stepViewQ);
+  viewSlotPermutation=buildViewSlotPermutation(viewOrientationQ);
+  viewDrag.committedTurns=committedTurns;
+
+  if(Math.abs(residualTurns)<1e-6){
+    viewDrag.angle=0;
+    viewDrag.dir=viewDrag.positiveScreenDir;
+    viewDrag.segmentKey=committedTurns+':0';
+    viewDrag.targetQ=null;
+    viewDrag.targetPerm=null;
+    viewDrag.visualMove=null;
+    viewDrag.dotMap=null;
+    return;
+  }
+
+  const dir=Math.sign(residualTurns);
+  const key=committedTurns+':'+dir;
+  if(viewDrag.segmentKey!==key){
+    const seg=buildViewSegmentMap(viewDrag.axis,dir);
+    viewDrag.dir=dir;
+    viewDrag.targetQ=seg.targetQ;
+    viewDrag.targetPerm=seg.targetPerm;
+    viewDrag.visualMove=seg.visualMove;
+    viewDrag.dotMap=seg.dotMap;
+    viewDrag.segmentKey=key;
+  }
+  viewDrag.angle=residualTurns*Math.PI/2;
+}
+
 function updateViewDrag(curX,curY){
   if(!viewDrag) return;
+
   const delta=viewDrag.screenAxis==='horizontal'
     ? curX-viewDrag.startX
     : curY-viewDrag.startY;
-  const progress=Math.max(0,Math.min(1,(delta*viewDrag.screenDir)/VIEW_DRAG_PX));
-  viewDrag.angle=viewDrag.dir*progress*Math.PI/2;
+
+  // Positive screen travel is mapped to whichever local cube-axis direction
+  // currently corresponds to that visual axis. There is intentionally NO
+  // clamp: one gesture may rotate 90°, 180°, 360°, or several revolutions.
+  const totalTurns=(delta/VIEW_DRAG_PX)*viewDrag.positiveScreenDir;
+  const committedTurns=signedWholeTurns(totalTurns);
+  const residualTurns=totalTurns-committedTurns;
+  refreshViewDragSegment(committedTurns,residualTurns);
 }
 
 function finishViewDrag(){
   if(!viewDrag) return;
+
   const startAngle=viewDrag.angle || 0;
-  const progress=Math.abs(startAngle)/(Math.PI/2);
-  const commit=progress>=0.5;
-  const targetAngle=commit ? viewDrag.dir*Math.PI/2 : 0;
+  const residualTurns=startAngle/(Math.PI/2);
+  const commit=Math.abs(residualTurns)>=0.5;
+
+  // If the gesture ended exactly on a quarter-turn boundary, the discrete
+  // orientation is already committed and no snap animation is necessary.
+  if(Math.abs(startAngle)<1e-6){
+    viewDrag=null;
+    return;
+  }
+
+  const targetAngle=commit ? Math.sign(startAngle)*Math.PI/2 : 0;
   const remaining=Math.abs(targetAngle-startAngle)/(Math.PI/2);
+
+  // Ensure a map exists for the final segment even after rapid reversal.
+  if(!viewDrag.dotMap){
+    const seg=buildViewSegmentMap(viewDrag.axis,Math.sign(startAngle)||1);
+    viewDrag.dir=Math.sign(startAngle)||1;
+    viewDrag.targetQ=seg.targetQ;
+    viewDrag.targetPerm=seg.targetPerm;
+    viewDrag.visualMove=seg.visualMove;
+    viewDrag.dotMap=seg.dotMap;
+  }
+
   viewSnap={
     ...viewDrag,
     startAngle,targetAngle,displayAngle:startAngle,
@@ -1565,11 +1651,9 @@ function finishViewDrag(){
 
 function currentViewProgress(source){
   if(!source) return 0;
-  return Math.max(0,Math.min(1,
-    source.angle !== undefined
-      ? source.angle/(source.dir*Math.PI/2)
-      : source.displayAngle/(source.dir*Math.PI/2)
-  ));
+  const dir=source.dir || Math.sign(source.angle || source.displayAngle || 1);
+  const angle=source.angle !== undefined ? source.angle : source.displayAngle;
+  return normalizedTurnProgress(angle,dir*Math.PI/2);
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -1578,7 +1662,7 @@ canvas.addEventListener('pointerdown', e => {
   if (pointers.size === 2){
     const [a, b] = [...pointers.values()];
     pinch = { d:Math.hypot(a.x-b.x, a.y-b.y), zoomFactor:targetZoomFactor };
-    viewDrag = null;
+    if(viewDrag) finishViewDrag();
     downInfo = null;
     return;
   }
@@ -1608,10 +1692,18 @@ canvas.addEventListener('pointermove', e => {
     if (!viewDrag){
       if (Math.hypot(dx,dy) < 3) return;
       const horizontal=Math.abs(dx)>=Math.abs(dy);
-      const signed=horizontal?dx:dy;
-      const desiredDir=Math.sign(signed) || 1;
-      const turn=localAxisForVisualAxis(horizontal?'y':'x',desiredDir);
-      if (!startViewDrag(turn.axis,turn.dir,downInfo.sx,downInfo.sy)) return;
+
+      // Resolve the local axis for POSITIVE screen travel once, then keep that
+      // same physical axis for the full gesture. This allows unlimited 360°
+      // rotation without the control axis changing at each quarter turn.
+      const turn=localAxisForVisualAxis(horizontal?'y':'x',1);
+      if (!startViewDrag(
+        turn.axis,
+        turn.dir,
+        horizontal?'horizontal':'vertical',
+        downInfo.sx,
+        downInfo.sy
+      )) return;
     }
     updateViewDrag(e.clientX,e.clientY);
     return;
@@ -2936,9 +3028,11 @@ function loop(now){
     }
   }
 
-  // Compose the fixed isometric presentation with the user's exact cube
-  // orientation. During a view drag the 3D cube and 2D orbit read the same
-  // angle, just like a face-layer drag.
+  // Compose the fixed isometric presentation with the current committed
+  // quarter-turn orientation plus the live residual segment. A single gesture
+  // can cross any number of full turns; only the current residual is applied
+  // here because completed quarters have already been folded into
+  // viewOrientationQ.
   _baseViewEuler.set(pitch,yaw,0,'XYZ');
   _baseViewQ.setFromEuler(_baseViewEuler);
   _displayOrientationQ.copy(viewOrientationQ);
@@ -2981,7 +3075,7 @@ function loop(now){
 resize();
 sizeOrbitCanvas();
 drawOrbit();
-showStatus('Drag a sticker to turn a layer. Drag the background to change faces.');
+showStatus('Drag a sticker to turn a layer. Drag the background to rotate freely.');
 requestAnimationFrame(loop);
 
 /* ------------------------------- debug API --------------------------------- */
@@ -3130,7 +3224,9 @@ window.__cube = {
   view: () => ({
     yaw,pitch,
     orientation:[viewOrientationQ.x,viewOrientationQ.y,viewOrientationQ.z,viewOrientationQ.w],
-    dragging:!!viewDrag,snapping:!!viewSnap
+    dragging:!!viewDrag,snapping:!!viewSnap,
+    committedTurns:viewDrag?.committedTurns ?? null,
+    residualAngle:viewDrag?.angle ?? viewSnap?.displayAngle ?? 0
   }),
   state: () => ({ queue:queue.length, active:!!active, history:history.length }),
   dbg: () => ({ queue:queue.length, active:!!active, t:active&&+active.t.toFixed(3),
