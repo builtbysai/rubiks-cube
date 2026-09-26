@@ -39,7 +39,19 @@ Live: https://builtbysai.com/rubiks-cube/
   gives a quick tile-flip flash the instant its color changes.
 - **Timer, move counter, win detection.** The clock starts on your first
   turn and stops when every face is uniform again. Solving triggers a confetti
-  burst and an animated win card.
+  burst and an animated win card, plus a personal-best time/move tracker
+  (stored locally, with a "New best!" badge when you beat it).
+- **Glass cube style.** A one-click alternate skin — translucent, glossy
+  stickers with a faint color-matched glow — next to the classic plastic look.
+- **Sound.** Short synthesized click/turn/win tones (no audio files), with a
+  one-click mute that's remembered.
+- **Fullscreen, help overlay, and a scramble readout.** A small utility bar
+  offers fullscreen, a `?` shortcuts/controls overlay, and every scramble's
+  exact move sequence appears as a tap-to-copy toast (handy for comparing
+  against a physical cube).
+- **Picks up where you left off.** Your cube's move history is saved locally
+  and silently replayed on your next visit — refreshing the page doesn't
+  cost you your progress.
 
 ## How it works
 

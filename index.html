@@ -496,6 +496,77 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
   .dockAction{min-height:44px;}
 }
 
+/* -------------------------------- utility bar -------------------------------- */
+#utilityBar{
+  position:absolute;z-index:7;top:14px;right:14px;
+  display:flex;gap:5px;padding:5px;
+  border:1px solid var(--line);border-radius:16px;
+  background:rgba(20,22,29,.72);
+  box-shadow:var(--shadow-md),inset 0 1px 0 rgba(255,255,255,.06);
+  backdrop-filter:blur(20px);
+  animation:dropIn var(--dur-slow) var(--ease-out-expo) both;
+  animation-delay:80ms;
+}
+.utilityBtn{
+  min-height:0;min-width:0;width:34px;height:34px;padding:0;
+  display:grid;place-items:center;
+  border:0;border-radius:11px;background:transparent;box-shadow:none;
+  color:var(--ink-soft);
+}
+.utilityBtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.utilityBtn:hover{background:var(--surface-strong);color:var(--ink);box-shadow:none;transform:none;}
+.utilityBtn:active{transform:scale(.9);}
+.utilityBtn[aria-pressed="true"]{background:rgba(255,59,59,.14);color:#ff8080;}
+.utilityBtn .i-off{display:none;}
+.utilityBtn[aria-pressed="true"] .i-on{display:none;}
+.utilityBtn[aria-pressed="true"] .i-off{display:block;}
+
+@media (max-width:760px){
+  #utilityBar{top:9px;right:9px;gap:4px;padding:4px;border-radius:13px;}
+  .utilityBtn{width:29px;height:29px;border-radius:9px;}
+  .utilityBtn svg{width:15px;height:15px;}
+}
+
+/* ------------------------------- status copy ---------------------------------- */
+#status.copyable{pointer-events:auto;cursor:pointer;}
+#status.copyable:hover{background:rgba(30,32,40,.96);}
+
+/* ------------------------------- win extras ------------------------------------ */
+.newBestTag{
+  display:none;margin:0 auto 8px;padding:4px 12px;width:fit-content;
+  border-radius:999px;background:linear-gradient(90deg,var(--c-r),var(--c-l));
+  color:#fff;font-size:10px;font-weight:760;letter-spacing:.08em;text-transform:uppercase;
+  box-shadow:0 6px 16px rgba(255,59,59,.4);
+}
+#win.newBest .newBestTag{display:block;animation:statPop 480ms var(--ease-out-back) 520ms both;}
+.winBest{margin:-8px 0 18px;color:var(--ink-faint);font-size:11.5px;}
+
+/* -------------------------------- help overlay --------------------------------- */
+#helpOverlay{
+  position:absolute;inset:0;z-index:11;display:none;align-items:center;justify-content:center;
+  background:rgba(6,7,10,.6);backdrop-filter:blur(10px);
+}
+#helpOverlay.show{display:flex;}
+.helpCard{
+  position:relative;width:min(92%,420px);padding:30px 28px;text-align:left;
+  opacity:0;transform:scale(.9) translateY(8px);
+}
+#helpOverlay.show .helpCard{animation:winPop 460ms var(--ease-pop) 40ms both;}
+.helpCard h2{
+  margin:0 0 16px;font-family:var(--font-display);font-size:22px;letter-spacing:-.02em;
+}
+.ghostClose{
+  position:absolute;top:14px;right:14px;min-height:0;width:30px;height:30px;padding:0;
+  display:grid;place-items:center;border:0;border-radius:9px;background:transparent;
+  box-shadow:none;color:var(--ink-faint);
+}
+.ghostClose svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;}
+.ghostClose:hover{background:var(--surface-strong);color:var(--ink);box-shadow:none;transform:none;}
+.helpList{margin:0;display:flex;flex-direction:column;gap:13px;}
+.helpList > div{display:flex;align-items:baseline;justify-content:space-between;gap:16px;}
+.helpList dt{flex:none;color:var(--ink);font-size:12.5px;font-weight:660;display:flex;gap:3px;align-items:center;}
+.helpList dd{margin:0;text-align:right;color:var(--ink-soft);font-size:12px;line-height:1.35;}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{
     animation-duration:.001ms!important;animation-iteration-count:1!important;
@@ -560,6 +631,24 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
       <span id="orbitCount" hidden></span>
     </aside>
 
+    <div id="utilityBar" role="toolbar" aria-label="View and app settings">
+      <button id="btnSound" class="utilityBtn" type="button" aria-pressed="false" aria-label="Mute sound" title="Sound">
+        <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M15.5 8.6a5 5 0 0 1 0 6.8M18.4 5.7a9.3 9.3 0 0 1 0 12.6"/></svg>
+        <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="m15.2 9.2 5.2 5.2M20.4 9.2l-5.2 5.2"/></svg>
+      </button>
+      <button id="btnSkin" class="utilityBtn" type="button" aria-pressed="false" aria-label="Switch to glass cube style" title="Cube style">
+        <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7v10l-8 4-8-4V7l8-4Z"/><path d="m4.4 7.2 7.6 4.1 7.6-4.1M12 11.3v9.3"/></svg>
+        <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12l3 5-9 11L3 9l3-5Z"/><path d="M3 9h18M8.5 4 12 9l3.5-5M12 9v11"/></svg>
+      </button>
+      <button id="btnFullscreen" class="utilityBtn" type="button" aria-pressed="false" aria-label="Enter fullscreen" title="Fullscreen">
+        <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6a1 1 0 0 1 1-1h3M20 9V6a1 1 0 0 0-1-1h-3M4 15v3a1 1 0 0 0 1 1h3M20 15v3a1 1 0 0 1-1 1h-3"/></svg>
+        <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v3a1 1 0 0 1-1 1H5M15 4v3a1 1 0 0 0 1 1h3M9 20v-3a1 1 0 0 0-1-1H5M15 20v-3a1 1 0 0 1 1-1h3"/></svg>
+      </button>
+      <button id="btnHelp" class="utilityBtn" type="button" aria-label="Controls and shortcuts" title="Help">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.3 9.6a2.8 2.8 0 0 1 5.35 1.1c0 1.75-2.55 2.05-2.55 3.55"/><path d="M12 17.3h.01"/></svg>
+      </button>
+    </div>
+
     <section id="solveTray" class="hidden" aria-label="Solution guide" aria-live="polite">
       <div class="solveHead">
         <div>
@@ -600,9 +689,28 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
         <div class="winBadge">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12.5 4.2 4.2L18.5 8"/></svg>
         </div>
+        <div class="newBestTag" id="newBestTag">New best!</div>
         <h2>Solved!</h2>
         <p id="winDetail"></p>
+        <p id="winBest" class="winBest"></p>
         <button class="primary" id="winScramble">New scramble</button>
+      </div>
+    </div>
+
+    <div id="helpOverlay" aria-hidden="true">
+      <div class="card helpCard">
+        <button id="btnCloseHelp" class="ghostClose" type="button" aria-label="Close help">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+        <h2>How to play</h2>
+        <dl class="helpList">
+          <div><dt>Drag a sticker</dt><dd>Twist that layer</dd></div>
+          <div><dt>Drag the background</dt><dd>Rotate the whole cube — spins through full revolutions</dd></div>
+          <div><dt>Scroll · pinch</dt><dd>Zoom in and out</dd></div>
+          <div><dt><kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd></dt><dd>Turn a face — hold <kbd>Shift</kbd> to reverse</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>Toggle this help</dd></div>
+          <div><dt><kbd>Esc</kbd></dt><dd>Close any dialog</dd></div>
+        </dl>
       </div>
     </div>
   </main>
@@ -1577,16 +1685,20 @@ function finishMove(){
   settleCubies(cubies, finished.angle);
   cubeGroup.remove(pivot);
   active = null;
-  if (!finished.isCancelledDrag && move.count !== false){
-    moveCount++;
-    movesEl.textContent = moveCount;
-    movesEl.classList.remove('pop');
-    void movesEl.offsetWidth; // restart the pop keyframes
-    movesEl.classList.add('pop');
-    if (move.record) history.push(move.historyEntry || move);
+  if (!finished.isCancelledDrag){
+    sfxTurn(); // every completed quarter-turn clicks, counted or not (scrambles, undo, solver playback)
+    if (move.count !== false){
+      moveCount++;
+      movesEl.textContent = moveCount;
+      movesEl.classList.remove('pop');
+      void movesEl.offsetWidth; // restart the pop keyframes
+      movesEl.classList.add('pop');
+      if (move.record) history.push(move.historyEntry || move);
+    }
   }
   if (typeof move.onComplete === 'function') move.onComplete();
   afterMove();
+  persistState();
 }
 
 // Instant (unanimated) turn, used by tests.
@@ -1605,11 +1717,18 @@ function applyInstant(m){
 function afterMove(){
   if (solutionGuide.playing) return;
   if (suppressWin){
-    if (!busy()) suppressWin = false;   // scramble drained
+    if (!busy()){
+      suppressWin = false;   // scramble drained
+      if (pendingScrambleText){
+        showStatus('Scramble: ' + pendingScrambleText, true, pendingScrambleText);
+        pendingScrambleText = null;
+      }
+    }
     return;
   }
   if (!busy() && isSolved()){
     stopTimer();
+    clearPersistedState();
     if (solving){
       solving = false;
       showWin('The solver found the way home.');
@@ -1621,6 +1740,107 @@ function afterMove(){
 
 const easeInOut = k => 0.5 - 0.5*Math.cos(Math.PI*k); // reference-like scripted sweep
 const easeOutCubic = k => 1 - Math.pow(1-k,3);         // tactile release: no dead stop before completion
+
+/* ------------------------------- sound design -------------------------------- */
+// Small synthesized sound effects (no audio assets to fetch): plain oscillators
+// with a short attack/decay envelope. Lazily created on first use since the
+// Web Audio API requires a user gesture before it can produce sound.
+let soundOn = localStorage.getItem('rc.muted') !== '1';
+let audioCtx = null;
+function ensureAudio(){
+  if (!soundOn) return null;
+  if (!audioCtx){
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(err){ soundOn = false; return null; }
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function tone({freq=440, duration=0.09, type='sine', gain=0.16, when=0}={}){
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const t0 = ctx.currentTime + when;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.02);
+}
+const sfxTurn = () => tone({freq:500 + Math.random()*50, duration:0.07, type:'triangle', gain:0.13});
+const sfxClick = () => tone({freq:720, duration:0.04, type:'square', gain:0.045});
+const sfxError = () => tone({freq:150, duration:0.16, type:'sawtooth', gain:0.06});
+function sfxWin(){
+  [523.25, 659.25, 783.99, 1046.5].forEach((freq,i) => tone({freq, duration:0.22, type:'sine', gain:0.15, when:i*0.11}));
+}
+// One delegated listener covers every button in the app (dock, movepad, map
+// tabs, solve tray, modals) instead of instrumenting each click handler.
+document.addEventListener('pointerdown', e => {
+  if (e.target.closest('button')) sfxClick();
+}, {passive:true});
+
+/* ---------------------------- saved-game persistence -------------------------- */
+// Only ever stores the plain, JSON-safe move descriptors already collected in
+// history (never guide/solver moves, which are recorded:false) plus the move
+// counter. Restoring replays them with applyInstant so the exact same code
+// path that builds cube state from user turns rebuilds it from a reload.
+const STATE_KEY = 'rc.state.v1';
+function persistState(){
+  try{ localStorage.setItem(STATE_KEY, JSON.stringify({ history, moveCount })); }
+  catch(err){ /* storage unavailable or full: nothing to do */ }
+}
+function clearPersistedState(){
+  try{ localStorage.removeItem(STATE_KEY); } catch(err){}
+}
+function restoreState(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch(err){}
+  if (!saved || !Array.isArray(saved.history) || !saved.history.length) return false;
+  try{
+    for (const m of saved.history) applyInstant(m);
+    moveCount = typeof saved.moveCount === 'number' ? saved.moveCount : history.length;
+    movesEl.textContent = moveCount;
+    return true;
+  } catch(err){
+    console.warn('Could not restore saved cube state', err);
+    buildCube(); history.length = 0; moveCount = 0; movesEl.textContent = '0';
+    clearPersistedState();
+    return false;
+  }
+}
+
+/* --------------------------------- cube skins ---------------------------------- */
+// "Glass" swaps every sticker/body material for a translucent, faintly
+// glowing variant. Reapplied after every buildCube() (a fresh reset creates
+// brand-new sticker materials that don't know about the current skin).
+let skin = localStorage.getItem('rc.skin') === 'glass' ? 'glass' : 'classic';
+function applySkin(){
+  const glass = skin === 'glass';
+  bodyMat.color.setHex(glass ? 0x1b2230 : 0x17171b);
+  bodyMat.roughness = glass ? 0.06 : 0.35;
+  bodyMat.metalness = glass ? 0 : 0.15;
+  bodyMat.transparent = glass;
+  bodyMat.opacity = glass ? 0.32 : 1;
+  bodyMat.needsUpdate = true;
+  for (const cubie of cubeGroup.children){
+    if (!cubie.userData.stickers) continue;
+    for (const st of cubie.userData.stickers){
+      const m = st.material;
+      m.transparent = glass;
+      m.opacity = glass ? 0.62 : 1;
+      m.roughness = glass ? 0.03 : 0.28;
+      m.metalness = glass ? 0.55 : 0.05;
+      m.emissive.setHex(glass ? FACE_COLORS[st.userData.home] : 0x000000);
+      m.emissiveIntensity = glass ? 0.65 : 0;
+      m.needsUpdate = true;
+    }
+  }
+  document.getElementById('btnSkin').setAttribute('aria-pressed', String(glass));
+}
 
 /* ------------------------------ cube state --------------------------------- */
 
@@ -1714,12 +1934,20 @@ const winDetail = document.getElementById('winDetail');
 let moveCount = 0;
 let timerStart = 0, timerOn = false, timerId = 0;
 
-function showStatus(msg, sticky=false){
+function showStatus(msg, sticky=false, copyText=null){
   statusEl.textContent = msg;
   statusEl.classList.add('show');
+  if (copyText){ statusEl.dataset.copy = copyText; statusEl.classList.add('copyable'); }
+  else { delete statusEl.dataset.copy; statusEl.classList.remove('copyable'); }
   clearTimeout(showStatus._t);
   if (!sticky) showStatus._t = setTimeout(() => statusEl.classList.remove('show'), 4200);
 }
+statusEl.addEventListener('click', async () => {
+  const text = statusEl.dataset.copy;
+  if (!text) return;
+  try{ await navigator.clipboard.writeText(text); showStatus('Copied scramble to clipboard.'); }
+  catch(err){ showStatus(text, true); }
+});
 function hideStatus(){ statusEl.classList.remove('show'); }
 
 function fmtTime(ms){
@@ -1816,13 +2044,43 @@ function stopConfetti(){
   cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
 }
 
+/* -------------------------------- personal bests ------------------------------- */
+const STATS_KEY = 'rc.stats.v1';
+function loadStats(){
+  try{
+    const s = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
+    if (s && typeof s === 'object') return { bestTimeMs:s.bestTimeMs ?? null, bestMoves:s.bestMoves ?? null, solves:s.solves || 0 };
+  } catch(err){}
+  return { bestTimeMs:null, bestMoves:null, solves:0 };
+}
+let stats = loadStats();
+function saveStats(){ try{ localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch(err){} }
+
+const winBest = document.getElementById('winBest');
+
 function showWin(sub){
-  const elapsed = timerStart ? fmtTime(Date.now()-timerStart) : '0:00';
+  const elapsedMs = timerStart ? Date.now()-timerStart : 0;
+  const elapsed = timerStart ? fmtTime(elapsedMs) : '0:00';
+  let newBest = false;
+  if (timerStart){
+    if (stats.bestTimeMs == null || elapsedMs < stats.bestTimeMs){ stats.bestTimeMs = elapsedMs; newBest = true; }
+    if (stats.bestMoves == null || moveCount < stats.bestMoves){ stats.bestMoves = moveCount; newBest = true; }
+  }
+  stats.solves = (stats.solves || 0) + 1;
+  saveStats();
+
   winDetail.textContent = (sub || 'Nice work.') + ' ' + elapsed + ' · ' + moveCount + ' moves.';
+  winBest.textContent = 'Best ' + (stats.bestTimeMs != null ? fmtTime(stats.bestTimeMs) : '—') +
+    ' · ' + (stats.bestMoves != null ? stats.bestMoves : '—') + ' moves · ' +
+    stats.solves + ' solve' + (stats.solves === 1 ? '' : 's');
+  winEl.classList.toggle('newBest', newBest);
   winEl.classList.add('show');
   burstConfetti();
+  sfxWin();
 }
-function hideWin(){ winEl.classList.remove('show'); stopConfetti(); }
+function hideWin(){ winEl.classList.remove('show', 'newBest'); stopConfetti(); }
+
+let pendingScrambleText = null;
 
 function doScramble(n=25){
   if (inputLocked() || busy()) return;
@@ -1832,6 +2090,7 @@ function doScramble(n=25){
   resetTimer(); solving = false;
   suppressWin = true;
   const faces = ['R','L','U','D','F','B'];
+  const tokens = [];
   let last = -1;
   for (let i=0; i<n; i++){
     let fi;
@@ -1839,15 +2098,17 @@ function doScramble(n=25){
     last = fi;
     const r = Math.random();
     const token = faces[fi] + (r < 0.33 ? "'" : r < 0.5 ? '2' : '');
+    tokens.push(token);
     enqueueMove({ ...parseMove(token), duration:210, record:true });
   }
-  showStatus('Scrambling…');
+  pendingScrambleText = tokens.join(' ');
+  showStatus('Scrambling…', true);
 }
 
 function doUndo(){
   if (inputLocked() || busy()) return;
   const m = history.pop();
-  if (!m){ showStatus('Nothing to undo.'); return; }
+  if (!m){ showStatus('Nothing to undo.'); sfxError(); return; }
   hideWin();
   enqueueMove({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:420, record:false });
   noteActivity();
@@ -1859,7 +2120,10 @@ function doReset(){
   queue.length = 0;
   active = null;   // buildCube discards the half-animated pivot with the cubies
   solving = false; solverBusy = false; suppressWin = false;
+  pendingScrambleText = null;
   buildCube();
+  applySkin();
+  clearPersistedState();
   history.length = 0; moveCount = 0; movesEl.textContent = '0';
   resetTimer(); hideWin(); hideStatus();
   showStatus('Back to a fresh cube.');
@@ -2112,7 +2376,7 @@ async function doSolve(){
   if (inputLocked() || busy()) return;
   const token = ++solveToken;
   const s = facelets();
-  if (isSolved()){ showStatus('Already solved. Give it a scramble first.'); return; }
+  if (isSolved()){ showStatus('Already solved. Give it a scramble first.'); sfxError(); return; }
   hideWin();
   solverBusy = true;
   const solveButton=document.getElementById('btnSolve');
@@ -2181,8 +2445,51 @@ for (const row of [['R','L','U','D','F','B'], ["R'","L'","U'","D'","F'","B'"]]){
   }
 }
 
+/* ------------------------------ utility controls ----------------------------- */
+
+const btnSound = document.getElementById('btnSound');
+btnSound.setAttribute('aria-pressed', String(!soundOn));
+btnSound.addEventListener('click', () => {
+  soundOn = !soundOn;
+  try{ localStorage.setItem('rc.muted', soundOn ? '0' : '1'); } catch(err){}
+  btnSound.setAttribute('aria-pressed', String(!soundOn));
+  if (soundOn) ensureAudio();
+});
+
+const btnSkin = document.getElementById('btnSkin');
+btnSkin.addEventListener('click', () => {
+  skin = skin === 'glass' ? 'classic' : 'glass';
+  try{ localStorage.setItem('rc.skin', skin); } catch(err){}
+  applySkin();
+});
+
+const btnFullscreen = document.getElementById('btnFullscreen');
+btnFullscreen.addEventListener('click', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(()=>{});
+  else document.exitFullscreen?.();
+});
+document.addEventListener('fullscreenchange', () => {
+  btnFullscreen.setAttribute('aria-pressed', String(!!document.fullscreenElement));
+});
+
+const helpOverlay = document.getElementById('helpOverlay');
+function showHelp(){ helpOverlay.classList.add('show'); }
+function hideHelp(){ helpOverlay.classList.remove('show'); }
+document.getElementById('btnHelp').addEventListener('click', () => {
+  helpOverlay.classList.contains('show') ? hideHelp() : showHelp();
+});
+document.getElementById('btnCloseHelp').addEventListener('click', hideHelp);
+helpOverlay.addEventListener('click', e => { if (e.target === helpOverlay) hideHelp(); });
+
 window.addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '?'){ helpOverlay.classList.contains('show') ? hideHelp() : showHelp(); return; }
+  if (e.key === 'Escape'){
+    if (helpOverlay.classList.contains('show')) hideHelp();
+    else if (winEl.classList.contains('show')) hideWin();
+    else if (!solveTray.classList.contains('hidden')) closeSolutionGuide();
+    return;
+  }
   const k = e.key.toUpperCase();
   if (!MOVES[k] || inputLocked() || busy()) return;
   hideWin();
@@ -2508,16 +2815,20 @@ function updateNet(force){
   netFacelets = s;
 }
 
-let mapMode = 'orbit'; // 'orbit' | 'net'
+let mapMode = localStorage.getItem('rc.mapMode') === 'net' ? 'net' : 'orbit'; // 'orbit' | 'net'
 const mapTabOrbit = document.getElementById('mapTabOrbit');
 const mapTabNet = document.getElementById('mapTabNet');
-function setMapMode(mode){
-  if (mode === mapMode) return;
-  mapMode = mode;
+function applyMapModeUI(mode){
   mapTabOrbit.setAttribute('aria-selected', String(mode === 'orbit'));
   mapTabNet.setAttribute('aria-selected', String(mode === 'net'));
   orbitCanvas.classList.toggle('mapview-hidden', mode !== 'orbit');
   netEl.classList.toggle('mapview-active', mode === 'net');
+}
+function setMapMode(mode){
+  if (mode === mapMode) return;
+  mapMode = mode;
+  try{ localStorage.setItem('rc.mapMode', mode); } catch(err){}
+  applyMapModeUI(mode);
   if (mode === 'orbit'){
     orbitCache = null; orbitSlotMap = null; orbitDots = null;
     sizeOrbitCanvas();
@@ -2526,6 +2837,7 @@ function setMapMode(mode){
     updateNet(true);
   }
 }
+applyMapModeUI(mapMode);
 mapTabOrbit.addEventListener('click', () => setMapMode('orbit'));
 mapTabNet.addEventListener('click', () => setMapMode('net'));
 
@@ -2645,10 +2957,16 @@ function loop(now){
   btnScrambleEl.classList.toggle('scrambling', suppressWin);
 }
 
+applySkin();
+const wasRestored = restoreState();
 resize();
 sizeOrbitCanvas();
-drawOrbit();
-showStatus('Drag a sticker to turn a layer. Drag the background to rotate freely.');
+if (mapMode === 'orbit') drawOrbit(); else updateNet(true);
+showStatus(
+  wasRestored
+    ? 'Welcome back — your cube was right where you left it.'
+    : 'Drag a sticker to turn a layer. Drag the background to rotate freely.'
+);
 requestAnimationFrame(loop);
 
 /* ------------------------------- debug API --------------------------------- */
