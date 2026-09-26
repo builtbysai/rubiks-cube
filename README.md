@@ -20,17 +20,21 @@ Live: https://builtbysai.com/rubiks-cube/
   `R L U D F B` turn faces; hold `Shift` for counter-clockwise.
 - **Scramble, undo, reset.** 25-move animated scrambles, full move history
   with undo, and instant reset.
-- **A real, live-updating solver.** The Solve button runs Herbert Kociemba's
-  two-phase algorithm in a Web Worker, a guided search through the cube's
-  state graph that typically finds a solution in about 20 moves. The worker
-  starts warming up its one-time move table the instant the page loads, in
-  the background, so the "preparing the solver" delay is almost always gone
-  by the time you actually scramble and ask for a solve. The solution guide
-  is a real side panel (not an overlay on top of the cube), highlights the
-  exact layer its next move turns directly on the 3D cube, and — if you turn
-  the cube yourself while it's open, by any means (drag, keys, undo) — it
-  quietly recomputes a fresh solution from wherever the cube actually ended
-  up, instead of going stale.
+- **A real, live-updating, fast-loading solver.** The Solve button runs
+  Herbert Kociemba's two-phase algorithm in a Web Worker, a guided search
+  through the cube's state graph that typically finds a solution in about
+  20 moves. Building its move/pruning tables (~1.8M small integers) is
+  genuinely expensive — real one-time BFS work, not a loading illusion — so
+  the worker now caches them in IndexedDB the first time and just reads
+  that cache back in on every later visit instead of recomputing from
+  scratch. That worker also boots from a dependency-free script at the very
+  top of `<head>`, before the three.js module below even finishes fetching
+  from its CDN, so it's warming up as early as physically possible. The
+  solution guide is a real side panel (not an overlay on top of the cube),
+  highlights the exact layer its next move turns directly on the 3D cube,
+  and — if you turn the cube yourself while it's open, by any means (drag,
+  keys, undo) — it quietly recomputes a fresh solution from wherever the
+  cube actually ended up, instead of going stale.
 - **Live 2D axis projection.** The cube's X, Y, and Z rotation axes are
   represented by three families of three concentric circles. All 54 physical
   stickers have stable identities in both views. During a turn, the 20 affected stickers split into the same two motion classes
@@ -47,8 +51,11 @@ Live: https://builtbysai.com/rubiks-cube/
   turn and stops when every face is uniform again. Solving triggers a confetti
   burst and an animated win card, plus a personal-best time/move tracker
   (stored locally, with a "New best!" badge when you beat it).
-- **Glass cube style.** A one-click alternate skin — translucent, glossy
-  stickers with a faint color-matched glow — next to the classic plastic look.
+- **Glass cube style.** A one-click alternate skin, unmistakably different
+  from the classic plastic look: every cubie edge glows and slowly breathes
+  cyan, the body turns to frosted, near-transparent resin, and the stickers
+  cut like glowing gems (clearcoat + transmission + strong self-illumination)
+  instead of flat matte plastic.
 - **Sound.** Short synthesized click/turn/win tones (no audio files), with a
   one-click mute that's remembered.
 - **Fullscreen, help overlay, and a scramble readout.** A small utility bar

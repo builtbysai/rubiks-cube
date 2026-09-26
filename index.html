@@ -4,6 +4,151 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rubik's Cube · Interactive 3D</title>
+<script>
+// The solver's move/pruning tables (~1.8M small integers) take real,
+// unavoidable CPU time to build the first time — that's the actual source
+// of any "solver is slow" delay, not a loading illusion. This bootstraps the
+// solver worker (and its IndexedDB table cache) as the very first thing the
+// page does, in a plain classic script with zero dependencies, so it starts
+// well before the three.js module below even finishes fetching from its CDN
+// — instead of waiting for the whole app to load first. See solveInWorker()
+// further down, which just delegates to this bridge.
+(function(){
+  const DB='rc-solver-cache', STORE='tables', KEY='kociemba-v1';
+  function openDB(){
+    return new Promise((resolve, reject) => {
+      if (typeof indexedDB === 'undefined'){ reject(new Error('no indexedDB')); return; }
+      const req = indexedDB.open(DB, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function loadCache(){
+    return openDB().then(db => new Promise(resolve => {
+      const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    })).catch(() => null);
+  }
+  function saveCache(data){
+    return openDB().then(db => new Promise(resolve => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(data, KEY);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    })).catch(() => false);
+  }
+
+  const bridge = {
+    worker:null, ready:false, usedCache:null,
+    warmStart: performance.now(), warmMs:null,
+    solveWaiter:null,
+  };
+  window.__solverBridge = bridge;
+  bridge.readyPromise = new Promise(resolve => { bridge._resolveReady = resolve; });
+
+  const base = new URL('vendor/', document.baseURI).href;
+  const src = `
+importScripts(${JSON.stringify(base + 'cube.js')}, ${JSON.stringify(base + 'solve.js')});
+const DB='${DB}', STORE='${STORE}', KEY='${KEY}';
+function openDB(){
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') { reject(new Error('no indexedDB')); return; }
+    const req = indexedDB.open(DB, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function loadCache(){
+  return openDB().then(db => new Promise(resolve => {
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(KEY);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  })).catch(() => null);
+}
+function saveCache(data){
+  return openDB().then(db => new Promise(resolve => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(data, KEY);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => resolve(false);
+  })).catch(() => false);
+}
+onmessage = function(e){
+  try{ postMessage({type:'solution', sol:Cube.fromString(e.data.facelets).solve()}); }
+  catch(err){ postMessage({type:'error', message:String(err)}); }
+};
+(async function boot(){
+  let cached = null;
+  try { cached = await loadCache(); } catch(e){ cached = null; }
+  if (cached && cached.moveTables && cached.pruningTables){
+    try {
+      Object.assign(Cube.moveTables, cached.moveTables);
+      Object.assign(Cube.pruningTables, cached.pruningTables);
+    } catch(e){ cached = null; }
+  }
+  Cube.initSolver();
+  if (!cached){
+    saveCache({
+      moveTables:{
+        twist:Cube.moveTables.twist, flip:Cube.moveTables.flip, FRtoBR:Cube.moveTables.FRtoBR,
+        URFtoDLF:Cube.moveTables.URFtoDLF, URtoDF:Cube.moveTables.URtoDF,
+        URtoUL:Cube.moveTables.URtoUL, UBtoDF:Cube.moveTables.UBtoDF, mergeURtoDF:Cube.moveTables.mergeURtoDF
+      },
+      pruningTables:{
+        sliceTwist:Cube.pruningTables.sliceTwist, sliceFlip:Cube.pruningTables.sliceFlip,
+        sliceURFtoDLFParity:Cube.pruningTables.sliceURFtoDLFParity, sliceURtoDFParity:Cube.pruningTables.sliceURtoDFParity
+      }
+    }).catch(()=>{});
+  }
+  postMessage({type:'ready', cached:!!cached});
+})();
+`;
+
+  let w;
+  try { w = new Worker(URL.createObjectURL(new Blob([src], { type:'text/javascript' }))); }
+  catch(err){ w = null; }
+  if (!w){ bridge._resolveReady(null); }
+  else {
+    bridge.worker = w;
+    w.onmessage = e => {
+      if (e.data.type === 'ready'){
+        bridge.ready = true;
+        bridge.usedCache = !!e.data.cached;
+        bridge.warmMs = performance.now() - bridge.warmStart;
+        bridge._resolveReady(w);
+      } else if (bridge.solveWaiter){
+        const cb = bridge.solveWaiter; bridge.solveWaiter = null; cb(e.data.sol || '');
+      }
+    };
+    w.onerror = () => {
+      if (!bridge.ready){ bridge.worker = null; bridge._resolveReady(null); }
+      else if (bridge.solveWaiter){ const cb = bridge.solveWaiter; bridge.solveWaiter = null; cb(''); }
+    };
+  }
+
+  bridge.getWorker = () => bridge.readyPromise;
+  bridge.solve = function(faceletsStr){
+    return bridge.readyPromise.then(worker => {
+      if (!worker){
+        // No worker (blocked, or Worker/IndexedDB unavailable): fall back to
+        // solving right here on the main thread.
+        try {
+          if (typeof Cube !== 'undefined'){ Cube.initSolver(); return Cube.fromString(faceletsStr).solve(); }
+        } catch(e){}
+        return '';
+      }
+      return new Promise(resolve => {
+        bridge.solveWaiter = resolve;
+        setTimeout(() => { if (bridge.solveWaiter){ const cb = bridge.solveWaiter; bridge.solveWaiter = null; cb(''); } }, 30000);
+        worker.postMessage({ facelets:faceletsStr });
+      });
+    });
+  };
+})();
+</script>
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b0c10">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -221,7 +366,6 @@ body::before{
   color:var(--ink);
   box-shadow:0 2px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);
 }
-#orbitTitle,#orbitHint{display:none!important;}
 #orbit{width:100%;height:auto;aspect-ratio:1;margin:0;display:block;pointer-events:none;}
 #orbit.mapview-hidden{display:none;}
 
@@ -252,7 +396,6 @@ body::before{
   55%{transform:rotateY(6deg) scale(1.05);}
   100%{transform:rotateY(0deg) scale(1);filter:brightness(1) saturate(1);}
 }
-.netFaceGap{grid-column-end:span 1;}
 
 /* ------------------------------- solve tray -------------------------------- */
 /* A real layout sibling of #stage now, not a floating overlay on top of the
@@ -841,7 +984,6 @@ for (let fi=0; fi<FACES.length; fi++){
 const _viewVecP = new THREE.Vector3();
 const _viewVecN = new THREE.Vector3();
 const _viewAxis = new THREE.Vector3();
-const _viewAxisQ = new THREE.Quaternion();
 
 function axisQuaternion(axis, angle, target=new THREE.Quaternion()){
   _viewAxis.set(0,0,0); _viewAxis[axis]=1;
@@ -957,8 +1099,16 @@ viewGroup.add(cubeGroup);
 scene.add(viewGroup);
 
 const bodyGeo = new RoundedBoxGeometry(0.96, 0.96, 0.96, 4, 0.07);
-const bodyMat = new THREE.MeshStandardMaterial({ color:0x17171b, roughness:0.35, metalness:0.15 });
+const bodyMat = new THREE.MeshPhysicalMaterial({ color:0x17171b, roughness:0.35, metalness:0.15 });
 const stickerGeo = new THREE.PlaneGeometry(0.82, 0.82);
+// Sharp, unsubdivided proxy just for edge outlines — the rounded, subdivided
+// bodyGeo would produce a messy scribble of tiny bevel edges instead of one
+// clean line per cube edge. One shared geometry + material glowing on every
+// cubie is the "Glass" skin's headline effect, so it reads as obviously,
+// unmistakably different from the classic look at a glance, not just a
+// slightly different material tweak.
+const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.975, 0.975, 0.975));
+const edgeMat = new THREE.LineBasicMaterial({ color:0x7ce8ff, transparent:true, opacity:0, depthWrite:false });
 
 function buildCube(){
   while (cubeGroup.children.length) {
@@ -973,13 +1123,14 @@ function buildCube(){
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.castShadow = true;
     cubie.add(body);
+    cubie.add(new THREE.LineSegments(edgeGeo, edgeMat));
     for (const f of FACES){
       const n = f.n;
       const px = x*n[0], py = y*n[1], pz = z*n[2];
       if (px + py + pz !== 1) continue;   // sticker only where this cubie touches face f
       const m = new THREE.Mesh(
         stickerGeo,
-        new THREE.MeshStandardMaterial({ color:FACE_COLORS[f.id], roughness:0.28, metalness:0.05 })
+        new THREE.MeshPhysicalMaterial({ color:FACE_COLORS[f.id], roughness:0.28, metalness:0.05 })
       );
       m.position.set(n[0]*0.485, n[1]*0.485, n[2]*0.485);
       m.lookAt(n[0]*2, n[1]*2, n[2]*2);
@@ -1309,13 +1460,6 @@ function computeTurn(dx, dy){
     dir:Math.sign(omega[axis]),
     dragDirX: dx/dragLen, dragDirY: dy/dragLen,
   };
-}
-// Legacy: decide and enqueue (for buttons/keyboard)
-function decideTurn(dx, dy){
-  const t = computeTurn(dx, dy);
-  if (!t) return;
-  enqueueMove({axis:t.axis, layer:t.layer, dir:t.dir, turns:1, duration:500, record:true});
-  noteActivity();
 }
 // Start a slow-drag: create pivot, attach cubies, track drag
 function startLayerDrag(turn, startX, startY){
@@ -1854,22 +1998,37 @@ function restoreState(){
 let skin = localStorage.getItem('rc.skin') === 'glass' ? 'glass' : 'classic';
 function applySkin(){
   const glass = skin === 'glass';
-  bodyMat.color.setHex(glass ? 0x1b2230 : 0x17171b);
-  bodyMat.roughness = glass ? 0.06 : 0.35;
+  // Classic: matte black plastic body, flat matte stickers — unchanged.
+  // Glass: a frosted, near-transparent body threaded with glowing cyan edge
+  // lines, and stickers cut like glowing gems (clearcoat + transmission +
+  // strong self-illumination). Deliberately not a subtle lighting tweak —
+  // it needs to read as obviously different at a glance, not just in a
+  // pixel diff.
+  bodyMat.color.setHex(glass ? 0x2a3346 : 0x17171b);
+  bodyMat.roughness = glass ? 0.15 : 0.35;
   bodyMat.metalness = glass ? 0 : 0.15;
   bodyMat.transparent = glass;
-  bodyMat.opacity = glass ? 0.32 : 1;
+  bodyMat.opacity = glass ? 0.22 : 1;
+  bodyMat.transmission = glass ? 0.55 : 0;
+  bodyMat.thickness = glass ? 0.6 : 0;
+  bodyMat.clearcoat = glass ? 1 : 0;
+  bodyMat.clearcoatRoughness = glass ? 0.15 : 0;
   bodyMat.needsUpdate = true;
+  edgeMat.opacity = glass ? 0.9 : 0;
   for (const cubie of cubeGroup.children){
     if (!cubie.userData.stickers) continue;
     for (const st of cubie.userData.stickers){
       const m = st.material;
       m.transparent = glass;
-      m.opacity = glass ? 0.62 : 1;
-      m.roughness = glass ? 0.03 : 0.28;
-      m.metalness = glass ? 0.55 : 0.05;
+      m.opacity = glass ? 0.88 : 1;
+      m.roughness = glass ? 0.05 : 0.28;
+      m.metalness = glass ? 0.1 : 0.05;
+      m.transmission = glass ? 0.35 : 0;
+      m.thickness = glass ? 0.4 : 0;
+      m.clearcoat = glass ? 1 : 0;
+      m.clearcoatRoughness = glass ? 0.08 : 0;
       m.emissive.setHex(glass ? FACE_COLORS[st.userData.home] : 0x000000);
-      m.emissiveIntensity = glass ? 0.65 : 0;
+      m.emissiveIntensity = glass ? 0.9 : 0;
       m.needsUpdate = true;
     }
   }
@@ -2171,75 +2330,19 @@ function doReset(){
 
 /* ------------------------------ solver ------------------------------------- */
 // Kociemba's two-phase algorithm (via the vendored cubejs library): a guided
-// search through the cube's state graph, usually about 20 moves. It runs in a
-// Web Worker so the one-time table build never freezes the page.
-
-let solverWorker = null, solverReady = false, solverWaiters = [];
+// search through the cube's state graph, usually about 20 moves. The actual
+// worker (creation, IndexedDB table cache, ready/solve protocol) lives in the
+// dependency-free <script> at the very top of <head> — window.__solverBridge
+// — so it starts before this module even finishes loading three.js from its
+// CDN. Everything here just reads that bridge's state.
+const solveInWorker = faceletsStr => window.__solverBridge.solve(faceletsStr);
 
 function updateSolverDot(){
   const dot = document.getElementById('solverDot');
   if (!dot) return;
-  dot.classList.toggle('ready', solverReady);
-  dot.classList.toggle('busy', !solverReady && !!solverWorker);
-}
-// Kick off the Kociemba table build the instant the page loads, in its own
-// worker thread, instead of waiting for the first "Solve" click. By the time
-// anyone actually scrambles and asks for a solve, the table is usually
-// already built, so the (real, and previously always-paid) one-time delay
-// almost never shows up.
-function warmUpSolver(){
-  getSolver().then(updateSolverDot);
-  updateSolverDot();
-}
-
-function getSolver(){
-  return new Promise(resolve => {
-    if (solverWorker && solverReady) return resolve(solverWorker);
-    solverWaiters.push(resolve);
-    if (solverWorker) return;
-    const base = window.__VENDOR_BASE || new URL('vendor/', document.baseURI).href;
-    const src =
-      "importScripts('" + base + "cube.js','" + base + "solve.js');\n" +
-      "Cube.initSolver();\n" +
-      "postMessage({type:'ready'});\n" +
-      "onmessage=function(e){\n" +
-      "  try{ postMessage({type:'solution', sol:Cube.fromString(e.data.facelets).solve()}); }\n" +
-      "  catch(err){ postMessage({type:'error', message:String(err)}); }\n" +
-      "};";
-    try {
-      solverWorker = new Worker(URL.createObjectURL(new Blob([src], { type:'text/javascript' })));
-    } catch(err){ solverWorker = null; }
-    if (!solverWorker){ finishWaiters(null); return; }
-    solverWorker.onmessage = e => {
-      if (e.data.type === 'ready'){ solverReady = true; finishWaiters(solverWorker); }
-      else if (solverWaiters._solve){ const cb = solverWaiters._solve; solverWaiters._solve = null; cb(e.data.sol || ''); }
-    };
-    solverWorker.onerror = () => {
-      if (!solverReady){ solverWorker = null; finishWaiters(null); }
-      else if (solverWaiters._solve){ const cb = solverWaiters._solve; solverWaiters._solve = null; cb(''); }
-    };
-    function finishWaiters(w){ const ws = solverWaiters; solverWaiters = []; ws.forEach(r => r(w)); }
-  });
-}
-
-function solveInWorker(faceletsStr){
-  return new Promise(async resolve => {
-    const w = await getSolver();
-    if (!w){ // worker unavailable: solve on the main thread
-      try {
-        if (typeof Cube !== 'undefined'){
-          Cube.initSolver();
-          resolve(Cube.fromString(faceletsStr).solve());
-          return;
-        }
-      } catch(e){}
-      resolve('');
-      return;
-    }
-    solverWaiters._solve = resolve;
-    setTimeout(() => { if (solverWaiters._solve){ const cb = solverWaiters._solve; solverWaiters._solve = null; cb(''); } }, 30000);
-    w.postMessage({ facelets:faceletsStr });
-  });
+  const b = window.__solverBridge;
+  dot.classList.toggle('ready', b.ready);
+  dot.classList.toggle('busy', !b.ready && !!b.worker);
 }
 
 function inverseToken(token){
@@ -2507,7 +2610,7 @@ async function doSolve(){
   solveButton.disabled=true;
   solveButton.classList.add('thinking');
   if(solveButtonLabel) solveButtonLabel.textContent='Solving…';
-  showStatus(solverReady ? 'Finding a solution…' : 'Preparing the solver…', true);
+  showStatus(window.__solverBridge.ready ? 'Finding a solution…' : 'Preparing the solver…', true);
   const sol = await solveInWorker(s);
   if (token !== solveToken){
     solverBusy=false;
@@ -2730,7 +2833,6 @@ function getOrbitGeometry(){
 // The 6 (pair, side) groups correspond to the 6 faces.
 // Assignment matches the reference image positions.
 const ORBIT_FAMILY_FOR_AXIS = {x:'R', y:'T', z:'L'};
-const ORBIT_AXIS_FOR_FAMILY = {R:'x', T:'y', L:'z'};
 const ORBIT_FACE_FOR_GROUP = {
   TLA:'L', TLB:'R',
   TRA:'F', TRB:'B',
@@ -2740,7 +2842,6 @@ const ORBIT_GROUP_FOR_FACE = Object.fromEntries(
   Object.entries(ORBIT_FACE_FOR_GROUP).map(([k,v]) => [v,k])
 );
 const ORBIT_COORD_TO_RING = v => Math.max(0,Math.min(2,1-Math.round(v)));
-const ORBIT_RING_TO_COORD = ring => 1-ring;
 
 function solvedColorForSlot(slot){
   return ORBIT_FACE_FOR_GROUP[slot.pair + slot.side] || 'U';
@@ -3084,6 +3185,7 @@ function loop(now){
     const pulse = 0.55 + 0.35*Math.sin(now*0.006);
     for (const st of highlightedStickers) st.material.emissiveIntensity = pulse;
   }
+  if (skin === 'glass') edgeMat.opacity = 0.65 + 0.3*Math.sin(now*0.0016);
 
   renderer.render(scene, camera);
   if (mapMode === 'orbit') drawOrbit(); else updateNet();
@@ -3092,7 +3194,6 @@ function loop(now){
 }
 
 applySkin();
-warmUpSolver();
 const wasRestored = restoreState();
 resize();
 sizeOrbitCanvas();
@@ -3115,7 +3216,7 @@ window.__cube = {
     moveCount += 0;
   },
   facelets, isSolved,
-  solverStatus: () => ({ ready:solverReady, hasWorker:!!solverWorker }),
+  solverStatus: () => ({ ready:window.__solverBridge.ready, hasWorker:!!window.__solverBridge.worker, usedCache:window.__solverBridge.usedCache, warmMs:window.__solverBridge.warmMs }),
   guideState: () => ({
     open:!solveTray.classList.contains('hidden'),
     tokens:[...solutionGuide.tokens], index:solutionGuide.index,
