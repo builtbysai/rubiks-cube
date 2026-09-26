@@ -32,8 +32,14 @@ Live: https://builtbysai.com/rubiks-cube/
   the active gray circle track, while the 8 rotating-face perimeter stickers
   move through the radial space between rings. Both use the exact same
   normalized animation progress as the 3D layer.
+- **2D unfolded cube net.** A second map style, switchable right next to the
+  orbit diagram: the classic flattened cross (U above F, L·F·R·B across the
+  middle, D below F). It's built from the same `facelets()` string that feeds
+  the solver, so it's always in exact sync with the 3D cube, and each sticker
+  gives a quick tile-flip flash the instant its color changes.
 - **Timer, move counter, win detection.** The clock starts on your first
-  turn and stops when every face is uniform again.
+  turn and stops when every face is uniform again. Solving triggers a confetti
+  burst and an animated win card.
 
 ## How it works
 
