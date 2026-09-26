@@ -157,11 +157,15 @@ body::before{
   min-height:0;
   margin:0 auto;
   padding-bottom:10px;
-  display:block;
+  display:flex;
+  flex-direction:row;
+  align-items:stretch;
+  gap:14px;
 }
 #stage{
   position:relative;
-  width:100%;height:100%;min-height:0;
+  flex:1 1 auto;
+  min-width:0;min-height:0;
   overflow:hidden;isolation:isolate;
   border:1px solid var(--line);
   border-radius:var(--radius-xl);
@@ -251,40 +255,58 @@ body::before{
 .netFaceGap{grid-column-end:span 1;}
 
 /* ------------------------------- solve tray -------------------------------- */
+/* A real layout sibling of #stage now, not a floating overlay on top of the
+   cube: it takes/gives back its own flex-basis, so the cube canvas visibly
+   resizes to make room (the existing ResizeObserver on #stage already
+   re-fits the renderer/camera on any such layout change). */
 #solveTray{
-  position:absolute;z-index:10;right:14px;bottom:14px;
-  width:min(430px,calc(100% - 28px));
+  position:relative;z-index:2;
+  flex:0 0 360px;
+  max-width:360px;min-width:0;
+  display:flex;flex-direction:column;
   padding:16px;
   border:1px solid var(--line);
   border-radius:var(--radius-lg);
-  background:rgba(20,22,29,.82);
-  box-shadow:var(--shadow-md),inset 0 1px 0 rgba(255,255,255,.06);
+  background:rgba(20,22,29,.86);
+  box-shadow:var(--shadow-lg),inset 0 1px 0 rgba(255,255,255,.06);
   backdrop-filter:blur(24px);
-  transform-origin:bottom right;
-  transition:opacity var(--dur-med) var(--ease-smooth),transform var(--dur-med) var(--ease-out-back);
+  overflow:hidden;
+  transition:flex-basis var(--dur-slow) var(--ease-out-expo),max-width var(--dur-slow) var(--ease-out-expo),
+             opacity var(--dur-med) ease,padding var(--dur-slow) ease,border-width var(--dur-slow) ease;
 }
-#solveTray.hidden{opacity:0;transform:translateY(14px) scale(.96);pointer-events:none;}
-.solveHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:11px;}
-.solveEyebrow{margin-bottom:3px;color:var(--ink-faint);font-size:9px;font-weight:760;letter-spacing:.14em;text-transform:uppercase;}
+#solveTray.hidden{
+  flex-basis:0;max-width:0;padding:0;border-width:0;opacity:0;pointer-events:none;
+}
+#solveTray.resyncing{opacity:.86;}
+.solveHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:11px;flex:0 0 auto;}
+.solveEyebrow{display:flex;align-items:center;gap:6px;margin-bottom:3px;color:var(--ink-faint);font-size:9px;font-weight:760;letter-spacing:.14em;text-transform:uppercase;}
+.solverDot{width:6px;height:6px;flex:none;border-radius:50%;background:#5a6072;transition:background var(--dur-med) ease,box-shadow var(--dur-med) ease;}
+.solverDot.ready{background:#2ee6a6;box-shadow:0 0 7px rgba(46,230,166,.75);}
+.solverDot.busy{background:var(--c-l);box-shadow:0 0 7px rgba(255,138,30,.7);animation:solverDotPulse 900ms ease-in-out infinite;}
+@keyframes solverDotPulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 #solveSummary{font-family:var(--font-display);font-size:18px;line-height:1.15;font-weight:660;letter-spacing:-.02em;}
 #btnCloseSolve{min-height:30px;padding:5px 10px;border-radius:9px;color:var(--ink-soft);font-size:11px;}
-.solveNowRow{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:10px;}
+.solveNowRow{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:10px;flex:0 0 auto;}
 .solveReadout{min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);}
 .solveReadout .label{display:block;margin-bottom:2px;color:var(--ink-faint);font-size:8px;font-weight:720;text-transform:uppercase;letter-spacing:.1em;}
 .solveReadout strong{display:block;overflow:hidden;color:var(--ink);font-size:14px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-display);}
 #solveProgressText{display:flex;align-items:center;justify-content:center;padding:0 3px;color:var(--ink-soft);font-size:10px;font-variant-numeric:tabular-nums;}
-.solveProgressTrack{height:5px;margin-bottom:11px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.08);}
+.solveProgressTrack{height:5px;margin-bottom:11px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.08);flex:0 0 auto;}
 #solveProgressBar{
   width:0%;height:100%;border-radius:inherit;
   background:linear-gradient(90deg,var(--c-r),var(--c-l));
   box-shadow:0 0 12px rgba(255,59,59,.55);
   transition:width var(--dur-med) var(--ease-out-expo);
 }
-#solveMoves{display:flex;gap:6px;min-height:38px;margin:0 -2px 11px;padding:2px 2px 5px;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin;scroll-snap-type:x proximity;}
+#solveMoves{
+  display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;
+  flex:1 1 auto;min-height:38px;margin:0 -2px 11px;padding:2px 2px 5px;
+  overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;
+}
 .solveMove{
   flex:0 0 auto;min-width:34px;height:32px;display:grid;place-items:center;padding:0 8px;
   border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.03);
-  color:var(--ink-soft);font-size:11px;font-weight:720;scroll-snap-align:center;
+  color:var(--ink-soft);font-size:11px;font-weight:720;
   transition:background var(--dur-fast) ease,border-color var(--dur-fast) ease,color var(--dur-fast) ease,transform var(--dur-fast) var(--ease-out-back);
 }
 .solveMove.done{opacity:.4;}
@@ -293,7 +315,7 @@ body::before{
   transform:translateY(-2px) scale(1.06);
   box-shadow:0 6px 18px rgba(255,59,59,.35);
 }
-.solveActions{display:grid;grid-template-columns:1.15fr repeat(4,1fr);gap:6px;}
+.solveActions{display:grid;grid-template-columns:1.15fr repeat(4,1fr);gap:6px;flex:0 0 auto;}
 .solveActions button{min-height:36px;padding:6px 8px;border-radius:11px;font-size:10.5px;}
 
 /* ---------------------------------- status --------------------------------- */
@@ -454,13 +476,17 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
   .hudMetric strong{font-size:13px;min-width:29px;}
   .hudDivider{height:21px;}
 
-  #workspace{width:calc(100% - 12px);}
-  #stage{border-radius:19px;}
+  #workspace{width:calc(100% - 12px);flex-direction:column;gap:8px;}
+  #stage{border-radius:19px;flex:1 1 auto;min-height:0;}
   #orbitPanel{top:9px;left:9px;width:116px;padding:6px;border-radius:14px;}
   .mapTabs{margin-bottom:5px;}
   .mapTab{font-size:7.5px;min-height:18px;}
 
-  #solveTray{left:8px;right:8px;bottom:8px;width:auto;padding:12px;border-radius:18px;transform-origin:bottom center;}
+  #solveTray{
+    flex:0 0 auto;width:100%;max-width:none;max-height:42vh;padding:12px;border-radius:18px;
+    transition:max-height var(--dur-slow) var(--ease-out-expo),opacity var(--dur-med) ease,padding var(--dur-slow) ease,border-width var(--dur-slow) ease;
+  }
+  #solveTray.hidden{flex-basis:auto;max-width:none;max-height:0;padding:0;border-width:0;}
   .solveNowRow{grid-template-columns:1fr 1fr;}
   #solveProgressText{grid-column:1 / -1;justify-content:flex-start;padding:0 2px;}
   .solveActions{grid-template-columns:1.2fr repeat(4,1fr);}
@@ -488,7 +514,7 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
   .topbar{min-height:46px;padding:6px 0 4px;}
   .brandText span{display:none;}
   #orbitPanel{width:110px;top:8px;left:8px;padding:6px;}
-  #solveTray{width:380px;right:8px;bottom:8px;padding:10px;}
+  #solveTray{flex-basis:300px;max-width:300px;padding:10px;}
   footer{padding:3px 0 5px;gap:4px;}
   .quickTurns .hint{display:none;}
   #movepad button{min-height:24px;}
@@ -649,39 +675,6 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
       </button>
     </div>
 
-    <section id="solveTray" class="hidden" aria-label="Solution guide" aria-live="polite">
-      <div class="solveHead">
-        <div>
-          <div class="solveEyebrow">Solution guide</div>
-          <div id="solveSummary">Ready</div>
-        </div>
-        <button id="btnCloseSolve" type="button">Close</button>
-      </div>
-
-      <div class="solveNowRow">
-        <div class="solveReadout">
-          <span class="label">Now</span>
-          <strong id="solveNow">—</strong>
-        </div>
-        <div class="solveReadout">
-          <span class="label">Next</span>
-          <strong id="solveNext">—</strong>
-        </div>
-        <div id="solveProgressText">0 / 0</div>
-      </div>
-
-      <div class="solveProgressTrack"><div id="solveProgressBar"></div></div>
-      <div id="solveMoves" aria-label="Solution moves"></div>
-
-      <div class="solveActions">
-        <button id="btnSolvePlay" class="primary" type="button">Play</button>
-        <button id="btnSolvePrev" type="button">Prev</button>
-        <button id="btnSolveNext" type="button">Next</button>
-        <button id="btnSolveRestart" type="button">Restart</button>
-        <button id="btnCopySolve" type="button">Copy</button>
-      </div>
-    </section>
-
     <div id="status"></div>
     <div id="win">
       <canvas id="confetti"></canvas>
@@ -714,6 +707,39 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
       </div>
     </div>
   </main>
+
+  <section id="solveTray" class="hidden" aria-label="Solution guide" aria-live="polite">
+    <div class="solveHead">
+      <div>
+        <div class="solveEyebrow"><span class="solverDot" id="solverDot"></span>Solution guide</div>
+        <div id="solveSummary">Ready</div>
+      </div>
+      <button id="btnCloseSolve" type="button">Close</button>
+    </div>
+
+    <div class="solveNowRow">
+      <div class="solveReadout">
+        <span class="label">Now</span>
+        <strong id="solveNow">—</strong>
+      </div>
+      <div class="solveReadout">
+        <span class="label">Next</span>
+        <strong id="solveNext">—</strong>
+      </div>
+      <div id="solveProgressText">0 / 0</div>
+    </div>
+
+    <div class="solveProgressTrack"><div id="solveProgressBar"></div></div>
+    <div id="solveMoves" aria-label="Solution moves"></div>
+
+    <div class="solveActions">
+      <button id="btnSolvePlay" class="primary" type="button">Play</button>
+      <button id="btnSolvePrev" type="button">Prev</button>
+      <button id="btnSolveNext" type="button">Next</button>
+      <button id="btnSolveRestart" type="button">Restart</button>
+      <button id="btnCopySolve" type="button">Copy</button>
+    </div>
+  </section>
 </div>
 
 <footer>
@@ -1614,7 +1640,7 @@ let solutionGuide = {
   index:0,
   playing:false,
   busy:false,
-  originalFacelets:'',
+  baseFacelets:'', // the facelets string the current tokens[] actually solves
 };
 
 function inputLocked(){ return solving || solverBusy || solutionGuide.playing || solutionGuide.busy; }
@@ -1695,6 +1721,7 @@ function finishMove(){
       movesEl.classList.add('pop');
       if (move.record) history.push(move.historyEntry || move);
     }
+    if (!move.guideMove) scheduleGuideResync();
   }
   if (typeof move.onComplete === 'function') move.onComplete();
   afterMove();
@@ -1729,6 +1756,13 @@ function afterMove(){
   if (!busy() && isSolved()){
     stopTimer();
     clearPersistedState();
+    // Solved by some path other than finishing the open guide (e.g. manual
+    // moves/undo happened to land on solved first): the guide's own index
+    // never reached the end, so it would otherwise sit there stale under
+    // the win card. A guide finished on its own terms is left exactly as is.
+    if (!solveTray.classList.contains('hidden') && solutionGuide.index < solutionGuide.tokens.length){
+      closeSolutionGuide();
+    }
     if (solving){
       solving = false;
       showWin('The solver found the way home.');
@@ -1840,6 +1874,12 @@ function applySkin(){
     }
   }
   document.getElementById('btnSkin').setAttribute('aria-pressed', String(glass));
+  // A skin swap touches every sticker's emissive state; reassert any active
+  // "next move" hint on top of it so toggling skins mid-guide can't blank it.
+  if (typeof solveTray !== 'undefined' && !solveTray.classList.contains('hidden')){
+    const {tokens, index} = solutionGuide;
+    setHintMove(index < tokens.length ? tokens[index] : null);
+  }
 }
 
 /* ------------------------------ cube state --------------------------------- */
@@ -2136,6 +2176,22 @@ function doReset(){
 
 let solverWorker = null, solverReady = false, solverWaiters = [];
 
+function updateSolverDot(){
+  const dot = document.getElementById('solverDot');
+  if (!dot) return;
+  dot.classList.toggle('ready', solverReady);
+  dot.classList.toggle('busy', !solverReady && !!solverWorker);
+}
+// Kick off the Kociemba table build the instant the page loads, in its own
+// worker thread, instead of waiting for the first "Solve" click. By the time
+// anyone actually scrambles and asks for a solve, the table is usually
+// already built, so the (real, and previously always-paid) one-time delay
+// almost never shows up.
+function warmUpSolver(){
+  getSolver().then(updateSolverDot);
+  updateSolverDot();
+}
+
 function getSolver(){
   return new Promise(resolve => {
     if (solverWorker && solverReady) return resolve(solverWorker);
@@ -2233,6 +2289,7 @@ const btnCloseSolve=document.getElementById('btnCloseSolve');
 function renderSolutionGuide(){
   const {tokens,index,playing,busy}=solutionGuide;
   const total=tokens.length;
+  const open=!solveTray.classList.contains('hidden');
   solveSummary.textContent=total ? total+' move'+(total===1?'':'s')+' to solved' : 'Ready';
   solveNowEl.textContent=index<total ? tokens[index] : 'Solved';
   solveNextEl.textContent=index+1<total ? tokens[index+1] : '—';
@@ -2244,6 +2301,7 @@ function renderSolutionGuide(){
   btnSolveNext.disabled=busy || index>=total;
   btnSolveRestart.disabled=busy || index<=0;
   btnCopySolve.disabled=!total;
+  updateSolverDot();
 
   const active=solveMovesEl.children[index];
   for(let i=0;i<solveMovesEl.children.length;i++){
@@ -2252,6 +2310,11 @@ function renderSolutionGuide(){
     el.classList.toggle('current',i===index);
   }
   if(active) active.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+
+  // Light up the 3D layer that "Now" actually turns, live, so the guide is
+  // useful without staring at notation. Cleared whenever the tray is closed
+  // or the guide is fully solved.
+  setHintMove(open && index<total ? tokens[index] : null);
 }
 
 function openSolutionGuide(tokens){
@@ -2259,7 +2322,7 @@ function openSolutionGuide(tokens){
   solutionGuide.index=0;
   solutionGuide.playing=false;
   solutionGuide.busy=false;
-  solutionGuide.originalFacelets=facelets();
+  solutionGuide.baseFacelets=facelets();
   solveMovesEl.replaceChildren();
   tokens.forEach((token,i)=>{
     const chip=document.createElement('div');
@@ -2282,7 +2345,7 @@ function openSolutionGuide(tokens){
     });
     solveMovesEl.appendChild(chip);
   });
-  solveTray.classList.remove('hidden');
+  solveTray.classList.remove('hidden', 'resyncing');
   renderSolutionGuide();
 }
 
@@ -2290,6 +2353,7 @@ function closeSolutionGuide(){
   solutionGuide.playing=false;
   solutionGuide.busy=false;
   solving=false;
+  clearTimeout(guideResyncTimer);
   solveTray.classList.add('hidden');
   renderSolutionGuide();
 }
@@ -2300,7 +2364,7 @@ function runGuideMove(token,direction=1){
   renderSolutionGuide();
   const actual=direction>0 ? token : inverseToken(token);
   return new Promise(resolve=>{
-    const m={...parseMove(actual),duration:430,record:false,count:false};
+    const m={...parseMove(actual),duration:430,record:false,count:false,guideMove:true};
     m.onComplete=()=>{
       solutionGuide.busy=false;
       renderSolutionGuide();
@@ -2308,6 +2372,65 @@ function runGuideMove(token,direction=1){
     };
     enqueueMove(m);
   });
+}
+
+/* ------------------------- live auto-updating guide ------------------------- */
+// The guide must never silently go stale. Any completed move that did NOT
+// come from the guide itself (a manual drag, a movepad/keyboard turn, an
+// undo — anything, while the tray happens to be open) schedules a fresh
+// solve from wherever the cube actually is now, and swaps the guide's move
+// list in place. A short debounce coalesces a fast burst of turns into one
+// recompute instead of one per move.
+let guideResyncTimer = null;
+function scheduleGuideResync(){
+  if (solveTray.classList.contains('hidden')) return;
+  if (solutionGuide.playing || solutionGuide.busy) return;
+  clearTimeout(guideResyncTimer);
+  guideResyncTimer = setTimeout(resyncGuideToCurrentState, 260);
+}
+async function resyncGuideToCurrentState(){
+  if (solveTray.classList.contains('hidden')) return;
+  if (solutionGuide.playing || solutionGuide.busy) return;
+  if (busy() || inputLocked()){ scheduleGuideResync(); return; } // still settling; try again shortly
+  if (isSolved()) return; // afterMove()'s own flow shows the win card
+  const s = facelets();
+  if (s === solutionGuide.baseFacelets) return; // nothing actually changed underneath it
+  solutionGuide.busy = true;
+  solveTray.classList.add('resyncing');
+  solveSummary.textContent = 'Updating…';
+  const sol = await solveInWorker(s);
+  solutionGuide.busy = false;
+  solveTray.classList.remove('resyncing');
+  if (facelets() !== s) return; // the cube moved again mid-computation; already rescheduled
+  if (!sol || !sol.trim()){ renderSolutionGuide(); return; }
+  openSolutionGuide(normalizeSolutionTokens(sol));
+}
+
+/* ----------------------------- 3D "next move" hint --------------------------- */
+// Highlights every sticker on the layer the guide's current move will turn,
+// so following it never requires reading notation. Purely visual: it never
+// touches cube state, and skin toggles/resets simply restore its baseline.
+let highlightedStickers = [];
+function clearHint(){
+  for (const st of highlightedStickers){
+    const glass = skin === 'glass';
+    st.material.emissive.setHex(glass ? FACE_COLORS[st.userData.home] : 0x000000);
+    st.material.emissiveIntensity = glass ? 0.65 : 0;
+  }
+  highlightedStickers = [];
+}
+function setHintMove(token){
+  clearHint();
+  if (!token) return;
+  const {axis, layer} = parseMove(token);
+  for (const cubie of cubeGroup.children){
+    if (!cubie.userData.pos || Math.round(cubie.userData.pos[axis]) !== layer) continue;
+    for (const st of cubie.userData.stickers){
+      st.material.emissive.setHex(0xffd23f);
+      st.material.needsUpdate = true;
+      highlightedStickers.push(st);
+    }
+  }
 }
 
 async function stepSolutionForward(){
@@ -2874,6 +2997,12 @@ function resize(){
   camera.aspect = w/h;
   camera.updateProjectionMatrix();
   sizeOrbitCanvas();
+  // The solve panel's open/close is now an animated layout change (flex-basis
+  // on #solveTray), so the ResizeObserver below can fire many times over that
+  // transition. Resizing a canvas always clears it, so redraw synchronously
+  // right here instead of waiting for the next rAF tick — otherwise the map
+  // visibly blanks out for a frame on every single resize tick.
+  if (mapMode === 'orbit') drawOrbit(); else if (typeof updateNet === 'function') updateNet(true);
 }
 window.addEventListener('resize', resize);
 
@@ -2951,6 +3080,11 @@ function loop(now){
     startMove(queue.shift());
   }
 
+  if (highlightedStickers.length){
+    const pulse = 0.55 + 0.35*Math.sin(now*0.006);
+    for (const st of highlightedStickers) st.material.emissiveIntensity = pulse;
+  }
+
   renderer.render(scene, camera);
   if (mapMode === 'orbit') drawOrbit(); else updateNet();
 
@@ -2958,6 +3092,7 @@ function loop(now){
 }
 
 applySkin();
+warmUpSolver();
 const wasRestored = restoreState();
 resize();
 sizeOrbitCanvas();
@@ -2980,6 +3115,13 @@ window.__cube = {
     moveCount += 0;
   },
   facelets, isSolved,
+  solverStatus: () => ({ ready:solverReady, hasWorker:!!solverWorker }),
+  guideState: () => ({
+    open:!solveTray.classList.contains('hidden'),
+    tokens:[...solutionGuide.tokens], index:solutionGuide.index,
+    busy:solutionGuide.busy, playing:solutionGuide.playing,
+  }),
+  hintStickerCount: () => highlightedStickers.length,
   orbit: () => ({
     on:orbitOn,
     dots:orbitDots ? orbitDots.length : 0,
