@@ -20,11 +20,17 @@ Live: https://builtbysai.com/rubiks-cube/
   `R L U D F B` turn faces; hold `Shift` for counter-clockwise.
 - **Scramble, undo, reset.** 25-move animated scrambles, full move history
   with undo, and instant reset.
-- **A real solver.** The Solve button runs Herbert Kociemba's two-phase
-  algorithm, a guided search through the cube's state graph that typically
-  finds a solution in about 20 moves, then plays it back move by move. The
-  solver runs in a Web Worker so the page never freezes during its one-time
-  table setup.
+- **A real, live-updating solver.** The Solve button runs Herbert Kociemba's
+  two-phase algorithm in a Web Worker, a guided search through the cube's
+  state graph that typically finds a solution in about 20 moves. The worker
+  starts warming up its one-time move table the instant the page loads, in
+  the background, so the "preparing the solver" delay is almost always gone
+  by the time you actually scramble and ask for a solve. The solution guide
+  is a real side panel (not an overlay on top of the cube), highlights the
+  exact layer its next move turns directly on the 3D cube, and — if you turn
+  the cube yourself while it's open, by any means (drag, keys, undo) — it
+  quietly recomputes a fresh solution from wherever the cube actually ended
+  up, instead of going stale.
 - **Live 2D axis projection.** The cube's X, Y, and Z rotation axes are
   represented by three families of three concentric circles. All 54 physical
   stickers have stable identities in both views. During a turn, the 20 affected stickers split into the same two motion classes
