@@ -1657,7 +1657,9 @@ function enqueueMove(m){
       onComplete:null
     });
     queue.push({
-      ...m, turns:1, record:!!m.record, count:true, historyEntry, _quarterPart:true
+      // Preserve the original move's counting: a 180-degree solver-guide move
+      // (count:false) must not leak a phantom move into the counter.
+      ...m, turns:1, record:!!m.record, count:m.count !== false, historyEntry, _quarterPart:true
     });
     return;
   }
@@ -1705,15 +1707,26 @@ function settleCubies(cubies, angle){
   }
 }
 
+let lastMoveWasUndo = false; // set per completed move; consumed by afterMove()
 function finishMove(){
   const finished = active;
   const { pivot, cubies, move } = finished;
   settleCubies(cubies, finished.angle);
   cubeGroup.remove(pivot);
   active = null;
+  lastMoveWasUndo = !!move.undo;
   if (!finished.isCancelledDrag){
     sfxTurn(); // every completed quarter-turn clicks, counted or not (scrambles, undo, solver playback)
-    if (move.count !== false){
+    // The landing half of an undo (the plain move, or the historyEntry-carrying
+    // half of a split 180-degree undo) takes back the reversed move's count.
+    const isUndoLanding = move.undo && (!move._quarterPart || move.historyEntry);
+    if (isUndoLanding){
+      moveCount = Math.max(0, moveCount - 1);
+      movesEl.textContent = moveCount;
+      movesEl.classList.remove('pop');
+      void movesEl.offsetWidth; // restart the pop keyframes
+      movesEl.classList.add('pop');
+    } else if (move.count !== false){
       moveCount++;
       movesEl.textContent = moveCount;
       movesEl.classList.remove('pop');
@@ -1754,18 +1767,24 @@ function afterMove(){
     return;
   }
   if (!busy() && isSolved()){
+    // An undo that lands back on solved is a reversal, not a solve: stop the
+    // clock and clear state, but never celebrate it or record it as a best.
+    const viaUndo = lastMoveWasUndo;
+    lastMoveWasUndo = false;
     stopTimer();
     clearPersistedState();
     // Solved by some path other than finishing the open guide (e.g. manual
-    // moves/undo happened to land on solved first): the guide's own index
+    // moves happened to land on solved first): the guide's own index
     // never reached the end, so it would otherwise sit there stale under
     // the win card. A guide finished on its own terms is left exactly as is.
     if (!solveTray.classList.contains('hidden') && solutionGuide.index < solutionGuide.tokens.length){
       closeSolutionGuide();
     }
-    if (solving){
+    if (viaUndo){
+      hideWin();
+    } else if (solving){
       solving = false;
-      showWin('The solver found the way home.');
+      showWin('The solver found the way home.', true);
     } else {
       showWin();
     }
@@ -2098,11 +2117,13 @@ function saveStats(){ try{ localStorage.setItem(STATS_KEY, JSON.stringify(stats)
 
 const winBest = document.getElementById('winBest');
 
-function showWin(sub){
+function showWin(sub, assisted=false){
   const elapsedMs = timerStart ? Date.now()-timerStart : 0;
   const elapsed = timerStart ? fmtTime(elapsedMs) : '0:00';
   let newBest = false;
-  if (timerStart){
+  // A solver-assisted finish is the algorithm's achievement, not the player's:
+  // celebrate it, but never record it as a personal best.
+  if (timerStart && !assisted){
     if (stats.bestTimeMs == null || elapsedMs < stats.bestTimeMs){ stats.bestTimeMs = elapsedMs; newBest = true; }
     if (stats.bestMoves == null || moveCount < stats.bestMoves){ stats.bestMoves = moveCount; newBest = true; }
   }
@@ -2123,7 +2144,7 @@ function hideWin(){ winEl.classList.remove('show', 'newBest'); stopConfetti(); }
 let pendingScrambleText = null;
 
 function doScramble(n=25){
-  if (inputLocked() || busy()) return;
+  if (inputLocked() || busy()){ showStatus('Wait for the cube to settle first.'); return; }
   closeSolutionGuide();
   hideWin(); hideStatus();
   history.length = 0; moveCount = 0; movesEl.textContent = '0';
@@ -2146,11 +2167,14 @@ function doScramble(n=25){
 }
 
 function doUndo(){
-  if (inputLocked() || busy()) return;
+  if (inputLocked() || busy()){ showStatus('Wait for the current move to finish.'); return; }
   const m = history.pop();
   if (!m){ showStatus('Nothing to undo.'); sfxError(); return; }
   hideWin();
-  enqueueMove({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:420, record:false });
+  // Undo reverses the popped move: it never counts as a new turn, and when it
+  // lands, finishMove takes back the reversed move's count (every history
+  // entry counted exactly one).
+  enqueueMove({ axis:m.axis, layer:m.layer, dir:-m.dir, turns:m.turns, duration:420, record:false, count:false, undo:true });
   noteActivity();
 }
 
@@ -2470,7 +2494,9 @@ async function playSolution(){
   solutionGuide.playing=true;
   solving=true;
   renderSolutionGuide();
-  restartTimer();
+  // Never rewind the clock here: the attempt started with the player's first
+  // turn (or the scramble), and the guide is part of that same attempt.
+  startTimer();
   while(solutionGuide.playing && solutionGuide.index<solutionGuide.tokens.length){
     const ok=await stepSolutionForward();
     if(!ok) break;
@@ -2480,7 +2506,7 @@ async function playSolution(){
   renderSolutionGuide();
   if(solutionGuide.index>=solutionGuide.tokens.length && isSolved()){
     stopTimer();
-    showWin('Solution complete.');
+    showWin('Solution complete.', true);
   }
 }
 
@@ -2496,7 +2522,7 @@ async function restartSolutionGuide(){
 }
 
 async function doSolve(){
-  if (inputLocked() || busy()) return;
+  if (inputLocked() || busy()){ showStatus('Wait for the cube to settle first.'); return; }
   const token = ++solveToken;
   const s = facelets();
   if (isSolved()){ showStatus('Already solved. Give it a scramble first.'); sfxError(); return; }
