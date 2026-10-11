@@ -47,8 +47,7 @@ Live: https://builtbysai.com/rubiks-cube/
   turn and stops when every face is uniform again. Solving triggers a confetti
   burst and an animated win card, plus a personal-best time/move tracker
   (stored locally, with a "New best!" badge when you beat it).
-- **Glass cube style.** A one-click alternate skin — translucent, glossy
-  stickers with a faint color-matched glow — next to the classic plastic look.
+- **Cube styles.** A labeled Classic/Glow switch in the utility bar: matte studio stickers or luminous glowing tiles. Both keep all six colors readable while solving; your choice is remembered.
 - **Sound.** Short synthesized click/turn/win tones (no audio files), with a
   one-click mute that's remembered.
 - **Fullscreen, help overlay, and a scramble readout.** A small utility bar
@@ -58,6 +57,7 @@ Live: https://builtbysai.com/rubiks-cube/
 - **Picks up where you left off.** Your cube's move history is saved locally
   and silently replayed on your next visit — refreshing the page doesn't
   cost you your progress.
+- **Installable PWA.** Add it to your home screen from any modern browser: it plays fully offline (cube, solver, and UI are cached on first visit via the service worker).
 
 ## How it works
 
