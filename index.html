@@ -6,6 +6,12 @@
 <title>Rubik's Cube · Interactive 3D</title>
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b0c10">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rubik's Cube">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -373,6 +379,16 @@ body::before{
   background:linear-gradient(95deg,#fff,#c9cedb);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
 #win .card p{margin:4px 0 20px;color:var(--ink-soft);font-size:13px;}
+.winSub{margin:2px 0 18px !important;color:var(--ink-soft);font-size:13px;}
+.winStats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 16px;}
+.winStats>div{padding:12px 6px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.03);}
+.winStats span{display:block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px;}
+.winStats strong{font-family:var(--font-display);font-size:21px;font-weight:700;letter-spacing:-.02em;color:var(--ink);}
+.winActions{display:flex;gap:10px;justify-content:center;}
+button.secondary{border:1px solid var(--line-strong);color:var(--ink);background:rgba(255,255,255,.05);
+  border-radius:14px;padding:12px 20px;font-weight:700;cursor:pointer;transition:background var(--dur-fast);}
+button.secondary:hover{background:rgba(255,255,255,.1);}
+#winScramble{border-radius:14px;padding:12px 22px;}
 
 /* --------------------------------- footer / controls ------------------------ */
 footer{
@@ -546,6 +562,13 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
 .utilityBtn .i-off{display:none;}
 .utilityBtn[aria-pressed="true"] .i-on{display:none;}
 .utilityBtn[aria-pressed="true"] .i-off{display:block;}
+.segControl{display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;
+  background:rgba(255,255,255,.05);border:1px solid var(--line);}
+.segControl button{border:0;background:transparent;color:var(--ink-faint);cursor:pointer;
+  font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:6px 11px;border-radius:999px;transition:background var(--dur-fast),color var(--dur-fast);}
+.segControl button[aria-pressed="true"]{background:var(--surface-strong);color:var(--ink);
+  box-shadow:0 2px 8px rgba(0,0,0,.35);}
 
 @media (max-width:760px){
   #utilityBar{top:9px;right:9px;gap:4px;padding:4px;border-radius:13px;}
@@ -604,8 +627,8 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/"
   }
 }
 </script>
@@ -662,10 +685,10 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
         <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M15.5 8.6a5 5 0 0 1 0 6.8M18.4 5.7a9.3 9.3 0 0 1 0 12.6"/></svg>
         <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="m15.2 9.2 5.2 5.2M20.4 9.2l-5.2 5.2"/></svg>
       </button>
-      <button id="btnSkin" class="utilityBtn" type="button" aria-pressed="false" aria-label="Switch to glass cube style" title="Cube style">
-        <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7v10l-8 4-8-4V7l8-4Z"/><path d="m4.4 7.2 7.6 4.1 7.6-4.1M12 11.3v9.3"/></svg>
-        <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12l3 5-9 11L3 9l3-5Z"/><path d="M3 9h18M8.5 4 12 9l3.5-5M12 9v11"/></svg>
-      </button>
+      <div id="skinSeg" class="segControl" role="group" aria-label="Cube style">
+        <button type="button" data-skin="classic" aria-pressed="true">Classic</button>
+        <button type="button" data-skin="glow" aria-pressed="false">Glow</button>
+      </div>
       <button id="btnFullscreen" class="utilityBtn" type="button" aria-pressed="false" aria-label="Enter fullscreen" title="Fullscreen">
         <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6a1 1 0 0 1 1-1h3M20 9V6a1 1 0 0 0-1-1h-3M4 15v3a1 1 0 0 0 1 1h3M20 15v3a1 1 0 0 1-1 1h-3"/></svg>
         <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v3a1 1 0 0 1-1 1H5M15 4v3a1 1 0 0 0 1 1h3M9 20v-3a1 1 0 0 0-1-1H5M15 20v-3a1 1 0 0 1 1-1h3"/></svg>
@@ -683,10 +706,18 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12.5 4.2 4.2L18.5 8"/></svg>
         </div>
         <div class="newBestTag" id="newBestTag">New best!</div>
-        <h2>Solved!</h2>
-        <p id="winDetail"></p>
+        <h2>Solved</h2>
+        <p id="winSub" class="winSub"></p>
+        <div class="winStats">
+          <div><span>Time</span><strong id="winTime">0:00</strong></div>
+          <div><span>Moves</span><strong id="winMoves">0</strong></div>
+          <div><span>Date</span><strong id="winDate"></strong></div>
+        </div>
         <p id="winBest" class="winBest"></p>
-        <button class="primary" id="winScramble">New scramble</button>
+        <div class="winActions">
+          <button class="primary" id="winScramble">New scramble</button>
+          <button class="secondary" id="winAdmire">Admire it</button>
+        </div>
       </div>
     </div>
 
@@ -703,6 +734,7 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
           <div><dt><kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd></dt><dd>Turn a face. Hold <kbd>Shift</kbd> to reverse</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>Toggle this help</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>Close any dialog</dd></div>
+          <div><dt>Cube style</dt><dd>Classic or Glow, top right</dd></div>
         </dl>
       </div>
     </div>
@@ -1867,32 +1899,35 @@ function restoreState(){
 }
 
 /* --------------------------------- cube skins ---------------------------------- */
-// "Glass" swaps every sticker/body material for a translucent, faintly
-// glowing variant. Reapplied after every buildCube() (a fresh reset creates
-// brand-new sticker materials that don't know about the current skin).
-let skin = localStorage.getItem('rc.skin') === 'glass' ? 'glass' : 'classic';
+// "Glow" swaps every sticker material for a luminous variant that keeps all
+// six colors readable while solving. Reapplied after every buildCube()
+// (a fresh reset creates brand-new sticker materials that don't know about
+// the current skin).
+let skin = localStorage.getItem('rc.skin');
+if (skin === 'glass') skin = 'glow'; // v1 name retired; same luminous style
+if (skin !== 'glow') skin = 'classic';
 function applySkin(){
-  const glass = skin === 'glass';
-  bodyMat.color.setHex(glass ? 0x1b2230 : 0x17171b);
-  bodyMat.roughness = glass ? 0.06 : 0.35;
-  bodyMat.metalness = glass ? 0 : 0.15;
-  bodyMat.transparent = glass;
-  bodyMat.opacity = glass ? 0.32 : 1;
+  const glow = skin === 'glow';
+  bodyMat.color.setHex(glow ? 0x0d1017 : 0x17171b);
+  bodyMat.roughness = glow ? 0.18 : 0.35;
+  bodyMat.metalness = glow ? 0.25 : 0.15;
+  bodyMat.transparent = false;
+  bodyMat.opacity = 1;
   bodyMat.needsUpdate = true;
   for (const cubie of cubeGroup.children){
     if (!cubie.userData.stickers) continue;
     for (const st of cubie.userData.stickers){
       const m = st.material;
-      m.transparent = glass;
-      m.opacity = glass ? 0.62 : 1;
-      m.roughness = glass ? 0.03 : 0.28;
-      m.metalness = glass ? 0.55 : 0.05;
-      m.emissive.setHex(glass ? FACE_COLORS[st.userData.home] : 0x000000);
-      m.emissiveIntensity = glass ? 0.65 : 0;
+      m.transparent = false;
+      m.opacity = 1;
+      m.roughness = glow ? 0.08 : 0.28;
+      m.metalness = glow ? 0.1 : 0.05;
+      m.emissive.setHex(glow ? FACE_COLORS[st.userData.home] : 0x000000);
+      m.emissiveIntensity = glow ? 1.15 : 0;
       m.needsUpdate = true;
     }
   }
-  document.getElementById('btnSkin').setAttribute('aria-pressed', String(glass));
+  syncSkinSeg();
   // A skin swap touches every sticker's emissive state; reassert any active
   // "next move" hint on top of it so toggling skins mid-guide can't blank it.
   if (typeof solveTray !== 'undefined' && !solveTray.classList.contains('hidden')){
@@ -1989,7 +2024,6 @@ const timeEl = document.getElementById('time');
 const movesEl = document.getElementById('moves');
 const statusEl = document.getElementById('status');
 const winEl = document.getElementById('win');
-const winDetail = document.getElementById('winDetail');
 let moveCount = 0;
 let timerStart = 0, timerOn = false, timerId = 0;
 
@@ -2116,6 +2150,10 @@ let stats = loadStats();
 function saveStats(){ try{ localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch(err){} }
 
 const winBest = document.getElementById('winBest');
+const winSub = document.getElementById('winSub');
+const winTime = document.getElementById('winTime');
+const winMoves = document.getElementById('winMoves');
+const winDate = document.getElementById('winDate');
 
 function showWin(sub, assisted=false){
   const elapsedMs = timerStart ? Date.now()-timerStart : 0;
@@ -2130,8 +2168,11 @@ function showWin(sub, assisted=false){
   stats.solves = (stats.solves || 0) + 1;
   saveStats();
 
-  winDetail.textContent = (sub || 'Nice work.') + ' ' + elapsed + ' · ' + moveCount + ' moves.';
-  winBest.textContent = 'Best ' + (stats.bestTimeMs != null ? fmtTime(stats.bestTimeMs) : '—') +
+  winSub.textContent = sub || 'Nice work.';
+  winTime.textContent = elapsed;
+  winMoves.textContent = moveCount;
+  winDate.textContent = new Date().toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  winBest.textContent = 'Personal best ' + (stats.bestTimeMs != null ? fmtTime(stats.bestTimeMs) : '—') +
     ' · ' + (stats.bestMoves != null ? stats.bestMoves : '—') + ' moves · ' +
     stats.solves + ' solve' + (stats.solves === 1 ? '' : 's');
   winEl.classList.toggle('newBest', newBest);
@@ -2139,6 +2180,7 @@ function showWin(sub, assisted=false){
   burstConfetti();
   sfxWin();
 }
+document.getElementById('winAdmire').addEventListener('click', hideWin);
 function hideWin(){ winEl.classList.remove('show', 'newBest'); stopConfetti(); }
 
 let pendingScrambleText = null;
@@ -2437,9 +2479,9 @@ async function resyncGuideToCurrentState(){
 let highlightedStickers = [];
 function clearHint(){
   for (const st of highlightedStickers){
-    const glass = skin === 'glass';
-    st.material.emissive.setHex(glass ? FACE_COLORS[st.userData.home] : 0x000000);
-    st.material.emissiveIntensity = glass ? 0.65 : 0;
+    const glow = skin === 'glow';
+    st.material.emissive.setHex(glow ? FACE_COLORS[st.userData.home] : 0x000000);
+    st.material.emissiveIntensity = glow ? 1.15 : 0;
   }
   highlightedStickers = [];
 }
@@ -2605,11 +2647,18 @@ btnSound.addEventListener('click', () => {
   if (soundOn) ensureAudio();
 });
 
-const btnSkin = document.getElementById('btnSkin');
-btnSkin.addEventListener('click', () => {
-  skin = skin === 'glass' ? 'classic' : 'glass';
+const skinSeg = document.getElementById('skinSeg');
+function syncSkinSeg(){
+  for (const b of skinSeg.querySelectorAll('button'))
+    b.setAttribute('aria-pressed', String(b.dataset.skin === skin));
+}
+skinSeg.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.skin === skin) return;
+  skin = b.dataset.skin;
   try{ localStorage.setItem('rc.skin', skin); } catch(err){}
   applySkin();
+  showStatus(skin === 'glow' ? 'Glow style: luminous stickers.' : 'Classic style: matte studio stickers.');
 });
 
 const btnFullscreen = document.getElementById('btnFullscreen');
@@ -3292,6 +3341,13 @@ window.__cube = {
     dur:active&&active.dur, cubies:cubeGroup.children.filter(c=>c.userData.pos).length,
     pivots:cubeGroup.children.filter(c=>!c.userData.pos).length }),
 };
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
