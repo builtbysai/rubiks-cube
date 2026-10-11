@@ -47,7 +47,8 @@ Live: https://builtbysai.com/rubiks-cube/
   turn and stops when every face is uniform again. Solving triggers a confetti
   burst and an animated win card, plus a personal-best time/move tracker
   (stored locally, with a "New best!" badge when you beat it).
-- **Cube styles.** A labeled Classic/Glow switch in the utility bar: matte studio stickers or luminous glowing tiles. Both keep all six colors readable while solving; your choice is remembered.
+- **Luminous 3D cube.** 27 cubies with glowing stickers that keep all six
+  colors readable while solving.
 - **Sound.** Short synthesized click/turn/win tones (no audio files), with a
   one-click mute that's remembered.
 - **Fullscreen, help overlay, and a scramble readout.** A small utility bar

@@ -365,15 +365,6 @@ body::before{
 @keyframes winPop{
   to{opacity:1;transform:scale(1) translateY(0);}
 }
-.winBadge{
-  width:64px;height:64px;margin:0 auto 14px;border-radius:50%;
-  display:grid;place-items:center;
-  background:var(--ring);
-  box-shadow:0 10px 30px rgba(255,59,59,.35);
-}
-.winBadge svg{width:30px;height:30px;stroke:#0b0c10;stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round;}
-.winBadge path{stroke-dasharray:24;stroke-dashoffset:24;animation:winCheck 480ms var(--ease-smooth) 420ms forwards;}
-@keyframes winCheck{to{stroke-dashoffset:0;}}
 #win .card h2{
   margin:0 0 7px;font-family:var(--font-display);font-size:29px;letter-spacing:-.03em;
   background:linear-gradient(95deg,#fff,#c9cedb);-webkit-background-clip:text;background-clip:text;color:transparent;
@@ -562,13 +553,6 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
 .utilityBtn .i-off{display:none;}
 .utilityBtn[aria-pressed="true"] .i-on{display:none;}
 .utilityBtn[aria-pressed="true"] .i-off{display:block;}
-.segControl{display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;
-  background:rgba(255,255,255,.05);border:1px solid var(--line);}
-.segControl button{border:0;background:transparent;color:var(--ink-faint);cursor:pointer;
-  font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-  padding:6px 11px;border-radius:999px;transition:background var(--dur-fast),color var(--dur-fast);}
-.segControl button[aria-pressed="true"]{background:var(--surface-strong);color:var(--ink);
-  box-shadow:0 2px 8px rgba(0,0,0,.35);}
 
 @media (max-width:760px){
   #utilityBar{top:9px;right:9px;gap:4px;padding:4px;border-radius:13px;}
@@ -685,10 +669,6 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
         <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M15.5 8.6a5 5 0 0 1 0 6.8M18.4 5.7a9.3 9.3 0 0 1 0 12.6"/></svg>
         <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="m15.2 9.2 5.2 5.2M20.4 9.2l-5.2 5.2"/></svg>
       </button>
-      <div id="skinSeg" class="segControl" role="group" aria-label="Cube style">
-        <button type="button" data-skin="classic" aria-pressed="true">Classic</button>
-        <button type="button" data-skin="glow" aria-pressed="false">Glow</button>
-      </div>
       <button id="btnFullscreen" class="utilityBtn" type="button" aria-pressed="false" aria-label="Enter fullscreen" title="Fullscreen">
         <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V6a1 1 0 0 1 1-1h3M20 9V6a1 1 0 0 0-1-1h-3M4 15v3a1 1 0 0 0 1 1h3M20 15v3a1 1 0 0 1-1 1h-3"/></svg>
         <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v3a1 1 0 0 1-1 1H5M15 4v3a1 1 0 0 0 1 1h3M9 20v-3a1 1 0 0 0-1-1H5M15 20v-3a1 1 0 0 1 1-1h3"/></svg>
@@ -702,9 +682,9 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
     <div id="win">
       <canvas id="confetti"></canvas>
       <div class="card">
-        <div class="winBadge">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12.5 4.2 4.2L18.5 8"/></svg>
-        </div>
+        <button id="btnCloseWin" class="ghostClose" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
         <div class="newBestTag" id="newBestTag">New best!</div>
         <h2>Solved</h2>
         <p id="winSub" class="winSub"></p>
@@ -716,7 +696,6 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
         <p id="winBest" class="winBest"></p>
         <div class="winActions">
           <button class="primary" id="winScramble">New scramble</button>
-          <button class="secondary" id="winAdmire">Admire it</button>
         </div>
       </div>
     </div>
@@ -734,7 +713,6 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
           <div><dt><kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd></dt><dd>Turn a face. Hold <kbd>Shift</kbd> to reverse</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>Toggle this help</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>Close any dialog</dd></div>
-          <div><dt>Cube style</dt><dd>Classic or Glow, top right</dd></div>
         </dl>
       </div>
     </div>
@@ -1898,19 +1876,14 @@ function restoreState(){
   }
 }
 
-/* --------------------------------- cube skins ---------------------------------- */
-// "Glow" swaps every sticker material for a luminous variant that keeps all
-// six colors readable while solving. Reapplied after every buildCube()
-// (a fresh reset creates brand-new sticker materials that don't know about
-// the current skin).
-let skin = localStorage.getItem('rc.skin');
-if (skin === 'glass') skin = 'glow'; // v1 name retired; same luminous style
-if (skin !== 'glow') skin = 'classic';
+/* --------------------------------- cube finish --------------------------------- */
+// One finish: luminous stickers that keep all six colors readable while solving.
+// Reapplied after every buildCube() (a fresh reset creates brand-new sticker
+// materials that don't know about the finish).
 function applySkin(){
-  const glow = skin === 'glow';
-  bodyMat.color.setHex(glow ? 0x0d1017 : 0x17171b);
-  bodyMat.roughness = glow ? 0.18 : 0.35;
-  bodyMat.metalness = glow ? 0.25 : 0.15;
+  bodyMat.color.setHex(0x0d1017);
+  bodyMat.roughness = 0.18;
+  bodyMat.metalness = 0.25;
   bodyMat.transparent = false;
   bodyMat.opacity = 1;
   bodyMat.needsUpdate = true;
@@ -1920,19 +1893,12 @@ function applySkin(){
       const m = st.material;
       m.transparent = false;
       m.opacity = 1;
-      m.roughness = glow ? 0.08 : 0.28;
-      m.metalness = glow ? 0.1 : 0.05;
-      m.emissive.setHex(glow ? FACE_COLORS[st.userData.home] : 0x000000);
-      m.emissiveIntensity = glow ? 1.15 : 0;
+      m.roughness = 0.08;
+      m.metalness = 0.1;
+      m.emissive.setHex(FACE_COLORS[st.userData.home]);
+      m.emissiveIntensity = 1.15;
       m.needsUpdate = true;
     }
-  }
-  syncSkinSeg();
-  // A skin swap touches every sticker's emissive state; reassert any active
-  // "next move" hint on top of it so toggling skins mid-guide can't blank it.
-  if (typeof solveTray !== 'undefined' && !solveTray.classList.contains('hidden')){
-    const {tokens, index} = solutionGuide;
-    setHintMove(index < tokens.length ? tokens[index] : null);
   }
 }
 
@@ -2180,7 +2146,7 @@ function showWin(sub, assisted=false){
   burstConfetti();
   sfxWin();
 }
-document.getElementById('winAdmire').addEventListener('click', hideWin);
+document.getElementById('btnCloseWin').addEventListener('click', hideWin);
 function hideWin(){ winEl.classList.remove('show', 'newBest'); stopConfetti(); }
 
 let pendingScrambleText = null;
@@ -2475,13 +2441,12 @@ async function resyncGuideToCurrentState(){
 /* ----------------------------- 3D "next move" hint --------------------------- */
 // Highlights every sticker on the layer the guide's current move will turn,
 // so following it never requires reading notation. Purely visual: it never
-// touches cube state, and skin toggles/resets simply restore its baseline.
+// touches cube state, and a reset restores the baseline finish.
 let highlightedStickers = [];
 function clearHint(){
   for (const st of highlightedStickers){
-    const glow = skin === 'glow';
-    st.material.emissive.setHex(glow ? FACE_COLORS[st.userData.home] : 0x000000);
-    st.material.emissiveIntensity = glow ? 1.15 : 0;
+    st.material.emissive.setHex(FACE_COLORS[st.userData.home]);
+    st.material.emissiveIntensity = 1.15;
   }
   highlightedStickers = [];
 }
@@ -2645,20 +2610,6 @@ btnSound.addEventListener('click', () => {
   try{ localStorage.setItem('rc.muted', soundOn ? '0' : '1'); } catch(err){}
   btnSound.setAttribute('aria-pressed', String(!soundOn));
   if (soundOn) ensureAudio();
-});
-
-const skinSeg = document.getElementById('skinSeg');
-function syncSkinSeg(){
-  for (const b of skinSeg.querySelectorAll('button'))
-    b.setAttribute('aria-pressed', String(b.dataset.skin === skin));
-}
-skinSeg.addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (!b || b.dataset.skin === skin) return;
-  skin = b.dataset.skin;
-  try{ localStorage.setItem('rc.skin', skin); } catch(err){}
-  applySkin();
-  showStatus(skin === 'glow' ? 'Glow style: luminous stickers.' : 'Classic style: matte studio stickers.');
 });
 
 const btnFullscreen = document.getElementById('btnFullscreen');
