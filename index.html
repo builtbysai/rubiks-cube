@@ -698,9 +698,9 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
         <h2>How to play</h2>
         <dl class="helpList">
           <div><dt>Drag a sticker</dt><dd>Twist that layer</dd></div>
-          <div><dt>Drag the background</dt><dd>Rotate the whole cube — spins through full revolutions</dd></div>
+          <div><dt>Drag the background</dt><dd>Rotate the whole cube (spins through full revolutions)</dd></div>
           <div><dt>Scroll · pinch</dt><dd>Zoom in and out</dd></div>
-          <div><dt><kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd></dt><dd>Turn a face — hold <kbd>Shift</kbd> to reverse</dd></div>
+          <div><dt><kbd>R</kbd><kbd>L</kbd><kbd>U</kbd><kbd>D</kbd><kbd>F</kbd><kbd>B</kbd></dt><dd>Turn a face. Hold <kbd>Shift</kbd> to reverse</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>Toggle this help</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>Close any dialog</dd></div>
         </dl>
@@ -2377,7 +2377,7 @@ function runGuideMove(token,direction=1){
 /* ------------------------- live auto-updating guide ------------------------- */
 // The guide must never silently go stale. Any completed move that did NOT
 // come from the guide itself (a manual drag, a movepad/keyboard turn, an
-// undo — anything, while the tray happens to be open) schedules a fresh
+// undo (anything, while the tray happens to be open) schedules a fresh
 // solve from wherever the cube actually is now, and swaps the guide's move
 // list in place. A short debounce coalesces a fast burst of turns into one
 // recompute instead of one per move.
@@ -3099,7 +3099,7 @@ sizeOrbitCanvas();
 if (mapMode === 'orbit') drawOrbit(); else updateNet(true);
 showStatus(
   wasRestored
-    ? 'Welcome back — your cube was right where you left it.'
+    ? 'Welcome back. Your cube was right where you left it.'
     : 'Drag a sticker to turn a layer. Drag the background to rotate freely.'
 );
 requestAnimationFrame(loop);
