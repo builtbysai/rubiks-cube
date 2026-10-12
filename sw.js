@@ -5,7 +5,7 @@
 // and only activates when the user accepts the in-app update prompt
 // (the page posts { type: 'SKIP_WAITING' }). Checks run on load, hourly,
 // and on tab visibility, so installed users actually receive new deploys. */
-const CACHE = 'rubiks-cube-v2';
+const CACHE = 'rubiks-cube-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +17,9 @@ const ASSETS = [
   './vendor/three/three.module.js',
   './vendor/three/geometries/RoundedBoxGeometry.js',
   './vendor/cube.js',
-  './vendor/solve.js'
+  './vendor/solve.js',
+  './vendor/solver-tables.js',
+  './vendor/solver-tables.bin'
 ];
 
 self.addEventListener('install', (e) => {

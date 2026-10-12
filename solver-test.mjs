@@ -1,5 +1,8 @@
 // Test harness for the vendored Kociemba solver (vendor/cube.js + vendor/solve.js)
 // Usage: node solver-test.mjs
+// Loads the precomputed tables from vendor/solver-tables.bin via
+// vendor/solver-tables.js, exactly like the Web Worker does, so this tests
+// the real shipping path (no runtime table computation).
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -9,11 +12,13 @@ const dir = dirname(fileURLToPath(import.meta.url));
 const sandbox = { console };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
-for (const f of ['vendor/cube.js', 'vendor/solve.js']) {
+for (const f of ['vendor/cube.js', 'vendor/solve.js', 'vendor/solver-tables.js']) {
   vm.runInContext(readFileSync(join(dir, f), 'utf8'), sandbox, { filename: f });
 }
 const Cube = sandbox.Cube;
-Cube.initSolver();
+const t0 = Date.now();
+sandbox.loadSolverTables(new Uint8Array(readFileSync(join(dir, 'vendor/solver-tables.bin'))));
+console.log(`table load: ${Date.now() - t0} ms (vs ~2000+ ms for Cube.initSolver)`);
 
 function applyMoves(cube, movesStr) {
   if (!movesStr.trim()) return cube;
