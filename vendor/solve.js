@@ -777,6 +777,11 @@
       // Initialize phase 2 coordinates
       init2(top = true) {
         if (this.parent === null) {
+          // Root state: phase-2 coordinates were assigned by init(cube);
+          // only the merged URtoDF coordinate still needs computing.
+          if (top) {
+            this.URtoDF = this.move('mergeURtoDF', this.URtoUL, this.UBtoDF);
+          }
           return;
         }
         // For other states, the phase 2 state is computed based on
@@ -810,105 +815,106 @@
       }
 
     };
-    solution = null;
-    phase1search = function(state) {
-      var depth, m, ref, results;
-      depth = 0;
-      results = [];
-      for (depth = m = 1, ref = maxDepth; (1 <= ref ? m <= ref : m >= ref); depth = 1 <= ref ? ++m : --m) {
-        phase1(state, depth);
-        if (solution !== null) {
-          break;
-        }
-        results.push(depth++);
+    // Two-stage search driver.
+    //
+    // Stage 1 — best-tracking, phase-1 depth capped at 8: finds the SHORTEST
+    // solution for easy positions (this fixes the old bug where a 1-move
+    // scramble got an 8-15 move "solution"). For hard positions the pruning
+    // tables kill every capped level instantly (minDist1 > depth), so this
+    // stage costs ~nothing when there is nothing short to find.
+    //
+    // Stage 2 — first-solution-wins from phase-1 depth 9: the classic fast
+    // Kociemba for hard positions (~20-22 moves, as before).
+    //
+    // Both phases start at depth 0 (the original started at 1, which made
+    // an empty phase-2 finish impossible and padded every solution).
+    var best = Infinity, bestSolution = null, firstWins = false, found = false;
+    var selfCube = this;
+    function noteSolution(state) {
+      // state is at phase-2 depth 0 with minDist2() === 0; state.depth is
+      // the total move count (phase-1 depth + phase-2 depth).
+      if (firstWins) {
+        if (!found) { found = true; bestSolution = state.solution(); }
+      } else if (state.depth < best) {
+        best = state.depth;
+        bestSolution = state.solution();
       }
-      return results;
-    };
+    }
+    function runSearch(d1Start, d1Cap, useFirstWins) {
+      best = Infinity; bestSolution = null; firstWins = useFirstWins; found = false;
+      freeStates = makePool();
+      var state = freeStates.pop().init(selfCube);
+      var d1Top = Math.min(maxDepth, d1Cap);
+      for (var d1 = d1Start; d1 <= d1Top && d1 < best && !found; d1++) {
+        phase1(state, d1);
+      }
+      freeStates.push(state);
+      return bestSolution;
+    }
+    function makePool() {
+      var pool = [], m;
+      for (m = 0; m <= maxDepth; m++) pool.push(new State);
+      return pool;
+    }
     phase1 = function(state, depth) {
-      var len, m, move, next, ref, ref1, results;
+      if (found) return;
+      var m, move, next, moves;
       if (depth === 0) {
         if (state.minDist1() === 0) {
           // Make sure we don't start phase 2 with a phase 2 move as the
           // last move in phase 1, because phase 2 would then repeat the
           // same move.
-          if (state.lastMove === null || (ref = state.lastMove, indexOf.call(allMoves2, ref) < 0)) {
-            return phase2search(state);
+          if (state.lastMove === null || allMoves2.indexOf(state.lastMove) < 0) {
+            phase2search(state);
           }
         }
-      } else if (depth > 0) {
-        if (state.minDist1() <= depth) {
-          ref1 = state.moves1();
-          results = [];
-          for (m = 0, len = ref1.length; m < len; m++) {
-            move = ref1[m];
-            next = state.next1(move);
-            phase1(next, depth - 1);
-            freeStates.push(next);
-            if (solution !== null) {
-              break;
-            } else {
-              results.push(void 0);
-            }
-          }
-          return results;
+      } else if (state.minDist1() <= depth) {
+        moves = state.moves1();
+        for (m = 0; m < moves.length && !found; m++) {
+          move = moves[m];
+          next = state.next1(move);
+          phase1(next, depth - 1);
+          freeStates.push(next);
         }
       }
     };
     phase2search = function(state) {
-      var depth, m, ref, results;
       // Initialize phase 2 coordinates
       state.init2();
-      results = [];
-      for (depth = m = 1, ref = maxDepth - state.depth; (1 <= ref ? m <= ref : m >= ref); depth = 1 <= ref ? ++m : --m) {
+      // Only phase-2 depths that can still beat the best total so far.
+      // Re-checked every iteration: an earlier depth may tighten best.
+      for (var depth = 0;
+           depth <= maxDepth - state.depth && state.depth + depth < best && !found;
+           depth++) {
         phase2(state, depth);
-        if (solution !== null) {
-          break;
-        }
-        results.push(depth++);
       }
-      return results;
     };
     phase2 = function(state, depth) {
-      var len, m, move, next, ref, results;
+      if (found) return;
+      var m, move, next, moves;
       if (depth === 0) {
         if (state.minDist2() === 0) {
-          return solution = state.solution();
+          noteSolution(state);
         }
-      } else if (depth > 0) {
-        if (state.minDist2() <= depth) {
-          ref = state.moves2();
-          results = [];
-          for (m = 0, len = ref.length; m < len; m++) {
-            move = ref[m];
-            next = state.next2(move);
-            phase2(next, depth - 1);
-            freeStates.push(next);
-            if (solution !== null) {
-              break;
-            } else {
-              results.push(void 0);
-            }
-          }
-          return results;
+      } else if (state.minDist2() <= depth) {
+        moves = state.moves2();
+        for (m = 0; m < moves.length && !found; m++) {
+          move = moves[m];
+          next = state.next2(move);
+          phase2(next, depth - 1);
+          freeStates.push(next);
         }
       }
     };
-    freeStates = (function() {
-      var m, ref, results;
-      results = [];
-      for (x = m = 0, ref = maxDepth + 1; (0 <= ref ? m <= ref : m >= ref); x = 0 <= ref ? ++m : --m) {
-        results.push(new State);
-      }
-      return results;
-    })();
-    state = freeStates.pop().init(this);
-    phase1search(state);
-    freeStates.push(state);
+    var solution = runSearch(0, 8, false);
+    if (solution === null) {
+      solution = runSearch(9, maxDepth, true);
+    }
     // Trim the trailing space
-    if (solution.length > 0) {
+    if (solution !== null && solution.length > 0) {
       solution = solution.substring(0, solution.length - 1);
     }
-    return solution;
+    return solution === null ? '' : solution;
   };
 
   faceNums = {
@@ -936,6 +942,9 @@
     clone.move(upright);
     rotation = new Cube().move(upright).center;
     uprightSolution = clone.solveUpright(maxDepth);
+    if (!uprightSolution) {
+      return ''; // already solved: nothing to do
+    }
     solution = [];
     ref = uprightSolution.split(' ');
     for (m = 0, len = ref.length; m < len; m++) {

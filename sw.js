@@ -1,6 +1,11 @@
 /* Rubik's Cube offline shell. Cache-first for the app shell; the cube,
-// solver, and all UI work without a network once installed. */
-const CACHE = 'rubiks-cube-v1';
+// solver, and all UI work without a network once installed.
+//
+// Updates never take over silently: a new worker precaches into "waiting"
+// and only activates when the user accepts the in-app update prompt
+// (the page posts { type: 'SKIP_WAITING' }). Checks run on load, hourly,
+// and on tab visibility, so installed users actually receive new deploys. */
+const CACHE = 'rubiks-cube-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -16,9 +21,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
 });
 
 self.addEventListener('activate', (e) => {
@@ -27,6 +30,10 @@ self.addEventListener('activate', (e) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (e) => {

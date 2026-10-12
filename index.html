@@ -325,6 +325,16 @@ body::before{
 .solveActions button{min-height:36px;padding:6px 8px;border-radius:11px;font-size:10.5px;}
 
 /* ---------------------------------- status --------------------------------- */
+/* ------------------------- service-worker update -------------------------- */
+#swUpdate{position:absolute;left:50%;bottom:64px;z-index:9;display:flex;align-items:center;gap:10px;width:min(92%,560px);padding:10px 10px 10px 16px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(14,15,20,.96);box-shadow:0 14px 34px rgba(0,0,0,.45);color:#f5f6f8;font-size:12.5px;line-height:1.35;opacity:0;pointer-events:none;backdrop-filter:blur(14px);transform:translateX(-50%) translateY(10px) scale(.96);transition:opacity var(--dur-med) var(--ease-out-back),transform var(--dur-med) var(--ease-out-back);}
+#swUpdate.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1);pointer-events:auto;}
+#swUpdate .swMsg{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#swUpdate .swMsg strong{display:block;font-size:13px;}
+#swUpdate .swMsg span{color:var(--ink-soft);font-size:11px;}
+#swUpdate button{flex:none;min-height:36px;padding:6px 14px;border-radius:11px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#f5f6f8;}
+#swUpdate button.primary{background:#2ee6a6;border-color:#2ee6a6;color:#06281c;}
+#swUpdate button:disabled{opacity:.6;cursor:wait;}
+@media (max-width:520px){#swUpdate .swMsg{white-space:normal;}}
 #status{
   position:absolute;left:50%;bottom:14px;z-index:8;
   transform:translateX(-50%) translateY(10px) scale(.96);
@@ -679,6 +689,11 @@ button:disabled{opacity:.38;cursor:default;transform:none!important;filter:none;
     </div>
 
     <div id="status"></div>
+    <div id="swUpdate" role="status" aria-live="polite">
+      <div class="swMsg"><strong>A new version is ready.</strong><span>Update to get the latest fixes and features.</span></div>
+      <button id="swUpdateNow" class="primary" type="button">Update now</button>
+      <button id="swUpdateLater" type="button">Later</button>
+    </div>
     <div id="win">
       <canvas id="confetti"></canvas>
       <div class="card">
@@ -3294,11 +3309,51 @@ window.__cube = {
 };
 </script>
 <script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+/* Service-worker registration + update prompt.
+ * A new worker never takes over silently: it installs into "waiting", we
+ * show a banner, and it only activates when the user taps Update now.
+ * Update checks run on load, hourly, and whenever the tab becomes visible,
+ * so installed users actually receive new deploys. */
+(function(){
+  if (!('serviceWorker' in navigator)) return;
+  var banner = document.getElementById('swUpdate');
+  var btnUpdate = document.getElementById('swUpdateNow');
+  var btnLater = document.getElementById('swUpdateLater');
+  var dismissed = false;
+  function showUpdate(reg){
+    if (dismissed || !reg.waiting || banner.classList.contains('show')) return;
+    banner.classList.add('show');
+    btnUpdate.onclick = function(){
+      btnUpdate.disabled = true;
+      btnUpdate.textContent = 'Updating\u2026';
+      reg.waiting.postMessage({ type:'SKIP_WAITING' });
+    };
+    btnLater.onclick = function(){
+      dismissed = true;
+      banner.classList.remove('show');
+    };
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    window.location.reload();
   });
-}
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').then(function(reg){
+      window.__swReg = reg; // hook for automated tests
+      if (reg.waiting) showUpdate(reg);
+      reg.addEventListener('updatefound', function(){
+        var sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', function(){
+          // installed + an active controller exists => this is an update, not first install
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdate(reg);
+        });
+      });
+      function check(){ reg.update().catch(function(){}); }
+      setInterval(check, 60 * 60 * 1000);
+      document.addEventListener('visibilitychange', function(){ if (!document.hidden) check(); });
+    }).catch(function(){ /* offline-first is best-effort */ });
+  });
+})();
 </script>
 </body>
 </html>
